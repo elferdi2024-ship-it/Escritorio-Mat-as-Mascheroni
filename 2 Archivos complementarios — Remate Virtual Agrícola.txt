@@ -1,0 +1,1993 @@
+# 📦 Archivos complementarios — Remate Virtual Agrícola
+
+Te entrego todo lo que faltaba para que la app **compile, funcione y esté completa**. Dividido en 6 bloques lógicos.
+
+---
+
+## 🧩 1. Componentes UI base (shadcn-style)
+
+### `components/ui/toast.tsx`
+
+```tsx
+'use client'
+import * as React from 'react'
+import { cva, type VariantProps } from 'class-variance-authority'
+import { X } from 'lucide-react'
+import { cn } from '@/lib/utils'
+
+const toastVariants = cva(
+  'group pointer-events-auto relative flex w-full items-center justify-between space-x-4 overflow-hidden rounded-xl border p-4 pr-8 shadow-lg transition-all',
+  {
+    variants: {
+      variant: {
+        default: 'border-cream-dark bg-white text-earth',
+        destructive: 'border-alert bg-alert-soft text-alert',
+        success: 'border-forest bg-forest/5 text-forest-dark',
+      },
+    },
+    defaultVariants: { variant: 'default' },
+  }
+)
+
+export interface ToastProps
+  extends React.HTMLAttributes<HTMLDivElement>,
+    VariantProps<typeof toastVariants> {
+  onClose?: () => void
+}
+
+export const Toast = React.forwardRef<HTMLDivElement, ToastProps>(
+  ({ className, variant, onClose, children, ...props }, ref) => (
+    <div ref={ref} className={cn(toastVariants({ variant }), className)} {...props}>
+      <div className="flex-1 text-sm">{children}</div>
+      {onClose && (
+        <button
+          onClick={onClose}
+          className="absolute right-2 top-2 rounded-md p-1 opacity-50 hover:opacity-100"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      )}
+    </div>
+  )
+)
+Toast.displayName = 'Toast'
+```
+
+### `components/ui/use-toast.ts`
+
+```typescript
+'use client'
+import { useEffect, useState } from 'react'
+
+export type ToastVariant = 'default' | 'destructive' | 'success'
+export interface ToastMessage {
+  id: string
+  title?: string
+  description?: string
+  variant?: ToastVariant
+  duration?: number
+}
+
+type Listener = (toasts: ToastMessage[]) => void
+let toasts: ToastMessage[] = []
+const listeners = new Set<Listener>()
+
+function emit() { listeners.forEach(l => l([...toasts])) }
+
+export function useToast() {
+  const [state, setState] = useState<ToastMessage[]>([])
+
+  useEffect(() => {
+    const listener: Listener = setState
+    listeners.add(listener)
+    setState([...toasts])
+    return () => { listeners.delete(listener) }
+  }, [])
+
+  return {
+    toasts: state,
+    toast: (msg: Omit<ToastMessage, 'id'>) => {
+      const id = Math.random().toString(36).slice(2)
+      const duration = msg.duration ?? 4500
+      toasts = [...toasts, { ...msg, id }]
+      emit()
+      setTimeout(() => {
+        toasts = toasts.filter(t => t.id !== id)
+        emit()
+      }, duration)
+      return { id }
+    },
+    dismiss: (id: string) => {
+      toasts = toasts.filter(t => t.id !== id)
+      emit()
+    },
+  }
+}
+```
+
+### `components/ui/toaster.tsx`
+
+```tsx
+'use client'
+import { useToast } from './use-toast'
+import { Toast } from './toast'
+
+export function Toaster() {
+  const { toasts, dismiss } = useToast()
+
+  return (
+    <div className="fixed inset-x-0 bottom-0 z-[100] flex flex-col gap-2 p-4 max-w-md mx-auto pointer-events-none">
+      {toasts.map(t => (
+        <div key={t.id} className="pointer-events-auto animate-in slide-in-from-bottom-4">
+          <Toast variant={t.variant} onClose={() => dismiss(t.id)}>
+            {t.title && <div className="font-semibold mb-0.5">{t.title}</div>}
+            {t.description && <div className="text-xs opacity-90">{t.description}</div>}
+          </Toast>
+        </div>
+      ))}
+    </div>
+  )
+}
+```
+
+### `lib/utils.ts`
+
+```typescript
+import { type ClassValue, clsx } from 'clsx'
+import { twMerge } from 'tailwind-merge'
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
+}
+```
+
+> Instalá: `npm i clsx tailwind-merge class-variance-authority lucide-react`
+
+---
+
+## 🎨 2. Componentes de Layout y Auction
+
+### `components/layout/HeroBanner.tsx`
+
+```tsx
+import { formatCurrency } from '@/lib/auction/rules'
+
+export function HeroBanner({ totalLots }: { totalLots: number }) {
+  return (
+    <header className="relative overflow-hidden bg-gradient-to-br from-forest-dark via-forest to-forest-dark text-cream">
+      {/* Textura sutil */}
+      <div
+        className="absolute inset-0 opacity-10"
+        style={{
+          backgroundImage:
+            'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'60\' height=\'60\' viewBox=\'0 0 60 60\'%3E%3Cpath d=\'M30 0l30 30-30 30L0 30z\' fill=\'none\' stroke=\'%23fff\' stroke-width=\'0.5\'/%3E%3C/svg%3E")',
+        }}
+      />
+
+      <div className="relative max-w-7xl mx-auto px-4 py-14 md:py-20 text-center">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-wheat/20 border border-wheat/40 text-wheat text-xs font-semibold tracking-widest uppercase mb-5">
+          <span className="w-2 h-2 rounded-full bg-wheat animate-pulse" />
+          Remate en vivo · Uruguay
+        </div>
+
+        <h1 className="font-display text-4xl md:text-6xl lg:text-7xl font-bold leading-tight">
+          Gran Remate Virtual
+          <br />
+          <span className="text-wheat">Agrícola #59</span>
+        </h1>
+
+        <p className="mt-5 text-cream/80 text-base md:text-lg max-w-2xl mx-auto">
+          🚜 Tractores, herramientas y maquinaria seleccionada.
+          <br className="hidden md:block" />
+          <b>{totalLots}</b> lotes · Martes 19 de Mayo, 20:00 hrs
+        </p>
+
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+          <a
+            href="#lotes"
+            className="px-6 py-3 bg-wheat hover:bg-wheat-light text-earth font-bold rounded-xl shadow-lg active:scale-95 transition"
+          >
+            Ver lotes disponibles
+          </a>
+          <a
+            href="/reglamento"
+            className="px-6 py-3 bg-transparent hover:bg-cream/10 text-cream border border-cream/30 font-semibold rounded-xl transition"
+          >
+            📜 Reglamento
+          </a>
+        </div>
+      </div>
+    </header>
+  )
+}
+```
+
+### `components/auction/LiveTicker.tsx`
+
+```tsx
+'use client'
+import { useEffect, useState } from 'react'
+import type { Lot } from '@/types'
+import { formatCurrency } from '@/lib/auction/rules'
+
+export function LiveTicker({ lots }: { lots: Lot[] }) {
+  const [index, setIndex] = useState(0)
+
+  useEffect(() => {
+    if (lots.length < 2) return
+    const id = setInterval(() => setIndex(i => (i + 1) % lots.length), 3500)
+    return () => clearInterval(id)
+  }, [lots.length])
+
+  if (!lots.length) return null
+  const lot = lots[index]
+
+  return (
+    <div className="bg-earth text-cream py-2.5 overflow-hidden">
+      <div className="max-w-7xl mx-auto px-4 flex items-center gap-3 text-sm">
+        <span className="flex items-center gap-1.5 font-bold text-wheat whitespace-nowrap">
+          <span className="w-2 h-2 rounded-full bg-wheat animate-pulse" />
+          EN VIVO
+        </span>
+        <div className="truncate">
+          <span className="opacity-70">Lote #{lot.id}:</span>{' '}
+          <b className="text-cream">{lot.title}</b>{' '}
+          <span className="opacity-70">—</span>{' '}
+          <span className="text-wheat font-bold">
+            {formatCurrency(lot.current_price ?? lot.starting_price)}
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+```
+
+### `components/auction/AlbumTabs.tsx`
+
+```tsx
+'use client'
+import { useState } from 'react'
+import type { Lot } from '@/types'
+
+interface Props { lots: Lot[] }
+
+export function AlbumTabs({ lots }: Props) {
+  const albums = [1, 2, 3, 4] as const
+  const [active, setActive] = useState<1 | 2 | 3 | 4>(1)
+
+  const counts = albums.reduce((acc, a) => {
+    acc[a] = lots.filter(l => l.album === a).length
+    return acc
+  }, {} as Record<number, number>)
+
+  return (
+    <div id="lotes" className="flex flex-wrap gap-2 mb-6">
+      {albums.map(a => (
+        <button
+          key={a}
+          onClick={() => setActive(a)}
+          className={`px-5 py-2.5 rounded-xl font-semibold text-sm transition-all ${
+            active === a
+              ? 'bg-forest text-white shadow-md'
+              : 'bg-white text-earth hover:bg-cream-dark border border-cream-dark'
+          }`}
+        >
+          Álbum {a}/4
+          <span
+            className={`ml-2 px-2 py-0.5 rounded-full text-xs ${
+              active === a ? 'bg-white/20' : 'bg-cream-dark'
+            }`}
+          >
+            {counts[a]}
+          </span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+export function useAlbumFilter(lots: Lot[], album: 1 | 2 | 3 | 4) {
+  return lots.filter(l => l.album === album)
+}
+```
+
+> **Tip:** Si querés que `LotGrid` reciba el álbum activo, convertilo en client component y maneja el estado ahí, o usa `useAlbumFilter` dentro de un wrapper client.
+
+### `components/auction/LotGrid.tsx`
+
+```tsx
+'use client'
+import { useState } from 'react'
+import type { Lot } from '@/types'
+import { LotCard } from './LotCard'
+
+export function LotGrid({ lots }: { lots: Lot[] }) {
+  const [album, setAlbum] = useState<1 | 2 | 3 | 4>(1)
+  const filtered = lots.filter(l => l.album === album)
+
+  const albums = [1, 2, 3, 4] as const
+  const counts = albums.reduce((acc, a) => {
+    acc[a] = lots.filter(l => l.album === a).length
+    return acc
+  }, {} as Record<number, number>)
+
+  return (
+    <>
+      {/* Tabs (móvil-friendly) */}
+      <div className="flex flex-wrap gap-2 mb-6">
+        {albums.map(a => (
+          <button
+            key={a}
+            onClick={() => setAlbum(a)}
+            className={`px-5 py-2.5 rounded-xl font-semibold text-sm transition-all ${
+              album === a
+                ? 'bg-forest text-white shadow-md'
+                : 'bg-white text-earth hover:bg-cream-dark border border-cream-dark'
+            }`}
+          >
+            Álbum {a}/4
+            <span className={`ml-2 px-2 py-0.5 rounded-full text-xs ${
+              album === a ? 'bg-white/20' : 'bg-cream-dark'
+            }`}>
+              {counts[a]}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {/* Grid */}
+      {filtered.length === 0 ? (
+        <div className="text-center py-16 text-earth-soft">
+          <p className="text-lg">Este álbum aún no tiene lotes cargados.</p>
+          <p className="text-sm mt-1">El administrador los cargará pronto.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          {filtered.map(lot => (
+            <LotCard key={lot.id} lot={lot} />
+          ))}
+        </div>
+      )}
+    </>
+  )
+}
+```
+
+### `components/auction/ImageGallery.tsx` — Con lightbox y swipe
+
+```tsx
+'use client'
+import { useState } from 'react'
+import Image from 'next/image'
+import { ChevronLeft, ChevronRight, X, ZoomIn } from 'lucide-react'
+
+interface Props {
+  images: string[]
+  title: string
+}
+
+export function ImageGallery({ images, title }: Props) {
+  const [active, setActive] = useState(0)
+  const [lightbox, setLightbox] = useState(false)
+
+  const safeImages = images.length ? images : ['/placeholder-tractor.jpg']
+
+  const next = () => setActive(i => (i + 1) % safeImages.length)
+  const prev = () => setActive(i => (i - 1 + safeImages.length) % safeImages.length)
+
+  return (
+    <>
+      <div className="bg-white rounded-2xl overflow-hidden shadow-sm">
+        {/* Imagen principal */}
+        <div className="relative aspect-[4/3] bg-cream-dark group">
+          <Image
+            src={safeImages[active]}
+            alt={`${title} - ${active + 1}`}
+            fill
+            priority
+            sizes="(max-width: 768px) 100vw, 60vw"
+            className="object-cover"
+          />
+
+          {safeImages.length > 1 && (
+            <>
+              <button
+                onClick={prev}
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/90 hover:bg-white shadow-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                aria-label="Anterior"
+              >
+                <ChevronLeft className="w-5 h-5 text-earth" />
+              </button>
+              <button
+                onClick={next}
+                className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/90 hover:bg-white shadow-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                aria-label="Siguiente"
+              >
+                <ChevronRight className="w-5 h-5 text-earth" />
+              </button>
+            </>
+          )}
+
+          <button
+            onClick={() => setLightbox(true)}
+            className="absolute bottom-3 right-3 px-3 py-2 bg-black/60 hover:bg-black/80 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5"
+          >
+            <ZoomIn className="w-3.5 h-3.5" />
+            Ampliar
+          </button>
+
+          <div className="absolute bottom-3 left-3 px-2.5 py-1 bg-black/60 text-white text-xs rounded-md">
+            {active + 1} / {safeImages.length}
+          </div>
+        </div>
+
+        {/* Thumbnails */}
+        {safeImages.length > 1 && (
+          <div className="flex gap-2 p-3 overflow-x-auto">
+            {safeImages.map((src, i) => (
+              <button
+                key={i}
+                onClick={() => setActive(i)}
+                className={`relative w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden border-2 transition ${
+                  active === i ? 'border-forest' : 'border-transparent opacity-60 hover:opacity-100'
+                }`}
+              >
+                <Image src={src} alt="" fill sizes="64px" className="object-cover" />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Lightbox */}
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center p-4"
+          onClick={() => setLightbox(false)}
+        >
+          <button
+            onClick={() => setLightbox(false)}
+            className="absolute top-4 right-4 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white"
+          >
+            <X className="w-5 h-5" />
+          </button>
+
+          <div
+            className="relative max-w-6xl w-full aspect-[4/3]"
+            onClick={e => e.stopPropagation()}
+          >
+            <Image
+              src={safeImages[active]}
+              alt={title}
+              fill
+              sizes="100vw"
+              className="object-contain"
+            />
+          </div>
+
+          {safeImages.length > 1 && (
+            <>
+              <button
+                onClick={e => { e.stopPropagation(); prev() }}
+                className="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white"
+              >
+                <ChevronLeft className="w-6 h-6" />
+              </button>
+              <button
+                onClick={e => { e.stopPropagation(); next() }}
+                className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white"
+              >
+                <ChevronRight className="w-6 h-6" />
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </>
+  )
+}
+```
+
+### `components/auction/BidHistory.tsx`
+
+```tsx
+'use client'
+import type { Bid } from '@/types'
+import { formatCurrency } from '@/lib/auction/rules'
+import { User, Trophy } from 'lucide-react'
+
+interface Props {
+  bids: Bid[]
+  currentSessionId?: string
+}
+
+export function BidHistory({ bids, currentSessionId }: Props) {
+  if (!bids.length) {
+    return (
+      <div className="bg-white rounded-2xl p-5 shadow-sm text-center">
+        <p className="text-earth-soft text-sm">
+          Todavía no hay pujas en este lote. ¡Sé el primero! 🎯
+        </p>
+      </div>
+    )
+  }
+
+  const topBid = bids[0]
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+      <div className="px-5 py-3 border-b border-cream-dark flex items-center justify-between">
+        <h3 className="font-display text-lg text-forest-dark">Historial de pujas</h3>
+        <span className="text-xs text-earth-soft">{bids.length} {bids.length === 1 ? 'puja' : 'pujas'}</span>
+      </div>
+
+      <div className="max-h-96 overflow-y-auto divide-y divide-cream-dark">
+        {bids.map((bid, i) => {
+          const isTop = i === 0
+          const isMe = currentSessionId && bid.bidder_session_id === currentSessionId
+
+          return (
+            <div
+              key={bid.id}
+              className={`px-5 py-3 flex items-center gap-3 ${
+                isTop ? 'bg-forest/5' : ''
+              }`}
+            >
+              <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${
+                isTop ? 'bg-wheat text-earth' : 'bg-cream-dark text-earth-soft'
+              }`}>
+                {isTop ? <Trophy className="w-4 h-4" /> : <User className="w-4 h-4" />}
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-earth truncate">
+                    {bid.bidder_name}
+                  </span>
+                  {isMe && (
+                    <span className="px-1.5 py-0.5 bg-forest text-white text-[10px] rounded uppercase font-bold">
+                      Vos
+                    </span>
+                  )}
+                  {isTop && (
+                    <span className="px-1.5 py-0.5 bg-wheat text-earth text-[10px] rounded uppercase font-bold">
+                      Líder
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-earth-soft">
+                  {new Date(bid.created_at).toLocaleString('es-UY')}
+                </p>
+              </div>
+
+              <div className="text-right">
+                <p className={`font-display font-bold ${isTop ? 'text-forest' : 'text-earth'}`}>
+                  {formatCurrency(bid.amount)}
+                </p>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+```
+
+### `components/auction/WinnerBanner.tsx` — Con confetti
+
+```tsx
+'use client'
+import { useEffect, useState } from 'react'
+import type { Lot, Bid } from '@/types'
+import { AUCTION_RULES, formatCurrency } from '@/lib/auction/rules'
+import { PartyPopper, Phone, CalendarCheck } from 'lucide-react'
+
+interface Props {
+  lot: Lot
+  winnerBid?: Bid | null
+}
+
+export function WinnerBanner({ lot, winnerBid }: Props) {
+  const [showConfetti, setShowConfetti] = useState(false)
+
+  useEffect(() => {
+    if (winnerBid) {
+      setShowConfetti(true)
+      const id = setTimeout(() => setShowConfetti(false), 4000)
+      return () => clearTimeout(id)
+    }
+  }, [winnerBid])
+
+  if (!winnerBid) {
+    return (
+      <div className="mb-6 p-4 bg-earth-soft/10 border border-earth-soft/30 rounded-xl text-earth-soft">
+        🔒 Este lote cerró sin recibir pujas.
+      </div>
+    )
+  }
+
+  const cash = AUCTION_RULES.getCommission(winnerBid.amount, 'cash')
+  const mp = AUCTION_RULES.getCommission(winnerBid.amount, 'mercadopago')
+
+  return (
+    <>
+      <div className="mb-6 relative overflow-hidden rounded-2xl bg-gradient-to-r from-forest to-forest-dark text-cream p-6 shadow-xl">
+        {/* Confetti decorativo */}
+        {showConfetti && (
+          <div className="absolute inset-0 pointer-events-none">
+            {[...Array(30)].map((_, i) => (
+              <span
+                key={i}
+                className="absolute text-2xl animate-bounce"
+                style={{
+                  left: `${Math.random() * 100}%`,
+                  top: `${Math.random() * 100}%`,
+                  animationDelay: `${Math.random() * 0.5}s`,
+                  animationDuration: `${1 + Math.random()}s`,
+                }}
+              >
+                {['🎉', '🎊', '✨', '🏆'][Math.floor(Math.random() * 4)]}
+              </span>
+            ))}
+          </div>
+        )}
+
+        <div className="relative flex items-start gap-4">
+          <div className="w-14 h-14 rounded-full bg-wheat flex items-center justify-center flex-shrink-0">
+            <PartyPopper className="w-7 h-7 text-earth" />
+          </div>
+          <div className="flex-1">
+            <h2 className="font-display text-2xl font-bold mb-1">
+              ¡Lote adjudicado!
+            </h2>
+            <p className="text-cream/80 text-sm">
+              Ganador: <b className="text-wheat">{winnerBid.bidder_name}</b> · Puja final:{' '}
+              <b className="text-wheat">{formatCurrency(winnerBid.amount)}</b>
+            </p>
+          </div>
+        </div>
+
+        <div className="relative mt-5 grid md:grid-cols-2 gap-3">
+          <CommissionCard
+            label="💵 Pago contado"
+            rate="12%"
+            total={cash.total}
+            commission={cash.commission}
+            highlight
+          />
+          <CommissionCard
+            label="💳 Mercado Pago"
+            rate="19%"
+            total={mp.total}
+            commission={mp.commission}
+          />
+        </div>
+
+        <div className="relative mt-5 flex flex-wrap gap-3">
+          <a
+            href="tel:096125030"
+            className="flex items-center gap-2 px-4 py-2.5 bg-wheat hover:bg-wheat-light text-earth font-semibold rounded-xl transition"
+          >
+            <Phone className="w-4 h-4" />
+            Llamar al escritorio
+          </a>
+          <a
+            href={`https://wa.me/59896125030?text=${encodeURIComponent(
+              `Hola! Soy ${winnerBid.bidder_name}, ganador del lote #${lot.id} (${lot.title}) por ${formatCurrency(winnerBid.amount)}. Quiero coordinar el pago.`
+            )}`}
+            target="_blank"
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#25D366] hover:bg-[#1fb955] text-white font-semibold rounded-xl transition"
+          >
+            <CalendarCheck className="w-4 h-4" />
+            Coordinar por WhatsApp
+          </a>
+        </div>
+
+        <p className="relative mt-4 text-xs text-cream/70 flex items-start gap-2">
+          <span>⏱️</span>
+          Tenés <b>24 horas</b> para contactar al escritorio y <b>1 semana</b> para coordinar el retiro.
+        </p>
+      </div>
+    </>
+  )
+}
+
+function CommissionCard({
+  label, rate, total, commission, highlight,
+}: {
+  label: string; rate: string; total: number; commission: number; highlight?: boolean
+}) {
+  return (
+    <div className={`p-4 rounded-xl ${highlight ? 'bg-wheat/20 border border-wheat/40' : 'bg-cream/10'}`}>
+      <div className="flex items-center justify-between text-xs">
+        <span className="opacity-80">{label}</span>
+        <span className="font-bold">Comisión {rate}</span>
+      </div>
+      <div className="mt-2 flex items-baseline justify-between">
+        <span className="text-xs opacity-70">Total a pagar:</span>
+        <span className="font-display text-xl font-bold text-wheat">
+          {formatCurrency(total)}
+        </span>
+      </div>
+      <div className="text-[11px] opacity-60 text-right">
+        (comisión: {formatCurrency(commission)})
+      </div>
+    </div>
+  )
+}
+```
+
+### `components/auction/CountdownBadge.tsx` — Para las tarjetas
+
+```tsx
+'use client'
+import { useEffect, useState } from 'react'
+import { AUCTION_RULES } from '@/lib/auction/rules'
+
+interface Props {
+  closingTime: string
+  status: 'active' | 'extended' | 'closed'
+}
+
+export function CountdownBadge({ closingTime, status }: Props) {
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  if (status === 'closed') {
+    return (
+      <span className="px-2 py-1 bg-earth text-cream text-[10px] font-bold rounded-md">
+        CERRADO
+      </span>
+    )
+  }
+
+  const diff = Math.max(0, Math.floor((new Date(closingTime).getTime() - now) / 1000))
+  const state = AUCTION_RULES.getCountdownState(diff)
+
+  const d = Math.floor(diff / 86400)
+  const h = Math.floor((diff % 86400) / 3600)
+  const m = Math.floor((diff % 3600) / 60)
+  const s = diff % 60
+
+  const colors = {
+    safe: 'bg-forest text-white',
+    warning: 'bg-wheat text-earth',
+    critical: 'bg-alert text-white pulse-critical',
+  }
+
+  const text = d > 0
+    ? `${d}d ${h}h`
+    : h > 0
+      ? `${h}h ${m}m`
+      : `${m}:${String(s).padStart(2, '0')}`
+
+  return (
+    <span className={`px-2 py-1 text-[10px] font-bold rounded-md tabular-nums ${colors[state]}`}>
+      ⏱ {text}
+    </span>
+  )
+}
+```
+
+---
+
+## 📄 3. Páginas complementarias
+
+### `app/reglamento/page.tsx`
+
+```tsx
+import Link from 'next/link'
+import { Metadata } from 'next'
+
+export const metadata: Metadata = {
+  title: 'Reglamento del Remate #59',
+}
+
+export default function ReglamentoPage() {
+  return (
+    <main className="min-h-screen bg-cream">
+      <div className="max-w-3xl mx-auto px-4 py-10">
+        <Link href="/" className="text-sm text-forest underline mb-6 inline-block">
+          ← Volver al remate
+        </Link>
+
+        <h1 className="font-display text-3xl md:text-4xl text-forest-dark mb-2">
+          📜 Reglamento del Remate
+        </h1>
+        <p className="text-earth-soft mb-8">
+          Gran Remate Virtual de Herramientas Agrícolas #59
+        </p>
+
+        <div className="space-y-6 text-earth leading-relaxed">
+          <Section title="🗓️ Fecha y horario">
+            <p>
+              El martillo se baja el <b>martes 19 de Mayo a las 20:00 hrs</b>, salvo
+              prórrogas automáticas por pujas en los últimos minutos.
+            </p>
+          </Section>
+
+          <Section title="📸 Álbumes">
+            <p>
+              El remate se organiza en 4 álbumes (1/4, 2/4, 3/4 y 4/4). Cada lote tiene
+              una <b>oferta sugerida</b> (precio de partida) visible en su ficha.
+            </p>
+            <p>Podés solicitar más fotos y videos por WhatsApp antes de ofertar.</p>
+          </Section>
+
+          <Section title="💰 Incrementos de puja">
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Lotes que comienzan en menos de US$ 200 → pujas de a <b>US$ 10</b>.</li>
+              <li>Lotes entre US$ 200 y US$ 5.000 → pujas de a <b>US$ 50</b>.</li>
+              <li>Lotes mayores a US$ 5.000 → pujas de a <b>US$ 100</b>.</li>
+            </ul>
+          </Section>
+
+          <Section title="⏰ Regla de la última hora (19:00 - 20:00)">
+            <p>
+              Para ofertar en la última hora del remate, <b>debés haber ofertado al menos
+              una vez antes de las 19:00</b> en ese lote. Si no lo hiciste, no podrás
+              participar en la última hora de ese lote específico.
+            </p>
+          </Section>
+
+          <Section title="⚡ Prórroga automática">
+            <p>
+              Si llega una puja en los <b>últimos 10 minutos</b> de un lote, el tiempo
+              se extiende automáticamente <b>10 minutos más</b>. Esto se repite hasta que
+              no haya más pujas.
+            </p>
+          </Section>
+
+          <Section title="💵 Comisiones">
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Pago contado: <b>12%</b> sobre el valor adjudicado.</li>
+              <li>Mercado Pago (varias cuotas): <b>19%</b>.</li>
+            </ul>
+          </Section>
+
+          <Section title="📞 Coordinación post-remate">
+            <p>
+              El ganador tiene <b>24 horas</b> desde el cierre para contactar al
+              escritorio y coordinar pago/retiro. El plazo máximo para retirar la
+              herramienta es de <b>1 semana</b>.
+            </p>
+          </Section>
+
+          <Section title="⚠️ Aclaraciones importantes">
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Las herramientas son <b>usadas</b> y se venden en ese estado.</li>
+              <li><b>No hay servicio de garantía.</b></li>
+              <li>
+                Pedí toda la información, fotos y videos <b>antes</b> de ofertar.
+                Luego de la adjudicación no se admiten reclamos por condición o detalles.
+              </li>
+              <li>
+                Al ofertar estás <b>aceptando estas condiciones</b>.
+              </li>
+            </ul>
+          </Section>
+
+          <div className="bg-forest text-cream rounded-2xl p-5 text-center">
+            <p className="font-semibold">Consultas: 096 125 030</p>
+            <a
+              href="https://wa.me/59896125030?text=Hola,%20tengo%20una%20consulta%20sobre%20el%20remate%20%2359"
+              target="_blank"
+              className="inline-block mt-3 px-5 py-2 bg-wheat hover:bg-wheat-light text-earth font-semibold rounded-lg"
+            >
+              Escribir por WhatsApp
+            </a>
+          </div>
+        </div>
+      </div>
+    </main>
+  )
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="bg-white rounded-xl p-5 shadow-sm">
+      <h2 className="font-display text-lg text-forest-dark mb-2">{title}</h2>
+      <div className="space-y-2 text-sm">{children}</div>
+    </section>
+  )
+}
+```
+
+### `app/ganadores/page.tsx`
+
+```tsx
+import { createServerSupabase } from '@/lib/supabase/server'
+import { formatCurrency } from '@/lib/auction/rules'
+import Link from 'next/link'
+import { Metadata } from 'next'
+import { Trophy, Phone } from 'lucide-react'
+
+export const metadata: Metadata = {
+  title: 'Ganadores del Remate #59',
+}
+
+export const revalidate = 60
+
+export default async function GanadoresPage() {
+  const supabase = await createServerSupabase()
+  const { data: closedLots } = await supabase
+    .from('lots')
+    .select(`
+      *,
+      winning_bid:bids!winner_bid_id(amount, bidder_name, bidder_session_id)
+    `)
+    .eq('status', 'closed')
+    .not('winner_bid_id', 'is', null)
+    .order('id')
+
+  const activeCount = await supabase
+    .from('lots')
+    .select('id', { count: 'exact', head: true })
+    .in('status', ['active', 'extended'])
+
+  return (
+    <main className="min-h-screen bg-cream">
+      <div className="max-w-5xl mx-auto px-4 py-10">
+        <Link href="/" className="text-sm text-forest underline mb-6 inline-block">
+          ← Volver al remate
+        </Link>
+
+        <h1 className="font-display text-3xl md:text-4xl text-forest-dark mb-2">
+          🏆 Ganadores del Remate #59
+        </h1>
+        <p className="text-earth-soft mb-8">
+          {closedLots?.length ?? 0} lotes adjudicados ·{' '}
+          {(activeCount.count ?? 0)} aún en curso
+        </p>
+
+        {!closedLots?.length ? (
+          <div className="bg-white rounded-2xl p-10 text-center text-earth-soft">
+            <Trophy className="w-12 h-12 mx-auto mb-3 opacity-40" />
+            <p>Aún no hay lotes cerrados.</p>
+            <p className="text-sm mt-1">Volvé cuando finalice el remate.</p>
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2">
+            {closedLots.map(lot => {
+              const winner = lot.winning_bid as any
+              return (
+                <div
+                  key={lot.id}
+                  className="bg-white rounded-2xl p-5 shadow-sm hover:shadow-md transition border-l-4 border-forest"
+                >
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div>
+                      <p className="text-xs text-earth-soft uppercase tracking-wider font-semibold">
+                        Lote #{lot.id} · Álbum {lot.album}/4
+                      </p>
+                      <Link
+                        href={`/lote/${lot.id}`}
+                        className="font-display text-lg text-forest-dark hover:underline"
+                      >
+                        {lot.title}
+                      </Link>
+                    </div>
+                    <Trophy className="w-5 h-5 text-wheat flex-shrink-0" />
+                  </div>
+
+                  <div className="flex items-center justify-between pt-3 border-t border-cream-dark">
+                    <div>
+                      <p className="text-xs text-earth-soft">Ganador</p>
+                      <p className="font-semibold text-earth">{winner?.bidder_name}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-earth-soft">Puja final</p>
+                      <p className="font-display text-xl font-bold text-forest">
+                        {formatCurrency(winner?.amount ?? 0)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        <div className="mt-10 bg-forest text-cream rounded-2xl p-5 flex items-center justify-between flex-wrap gap-4">
+          <div>
+            <p className="font-semibold">¿Sos ganador y necesitás coordinar?</p>
+            <p className="text-sm opacity-80">Tenés 24hs para contactar al escritorio.</p>
+          </div>
+          <a
+            href="tel:096125030"
+            className="px-5 py-2.5 bg-wheat hover:bg-wheat-light text-earth font-semibold rounded-xl flex items-center gap-2"
+          >
+            <Phone className="w-4 h-4" />
+            096 125 030
+          </a>
+        </div>
+      </div>
+    </main>
+  )
+}
+```
+
+---
+
+## 🔐 4. Admin completo (CRUD)
+
+### `app/admin/layout.tsx`
+
+```tsx
+import Link from 'next/link'
+import { LogOut, LayoutDashboard, Plus, List } from 'lucide-react'
+import { adminLogout } from '@/app/actions/admin'
+
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen bg-cream">
+      <aside className="bg-forest-dark text-cream">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link href="/admin/dashboard" className="font-display text-xl font-bold">
+              🚜 Admin Remates
+            </Link>
+            <nav className="hidden md:flex items-center gap-1 text-sm">
+              <NavLink href="/admin/dashboard" icon={<LayoutDashboard className="w-4 h-4" />}>
+                Dashboard
+              </NavLink>
+              <NavLink href="/admin/lotes" icon={<List className="w-4 h-4" />}>
+                Lotes
+              </NavLink>
+              <NavLink href="/admin/lotes/nuevo" icon={<Plus className="w-4 h-4" />}>
+                Nuevo lote
+              </NavLink>
+            </nav>
+          </div>
+          <form action={adminLogout}>
+            <button className="text-xs text-cream/80 hover:text-cream flex items-center gap-1">
+              <LogOut className="w-3.5 h-3.5" />
+              Salir
+            </button>
+          </form>
+        </div>
+      </aside>
+      <main className="max-w-7xl mx-auto px-4 py-8">{children}</main>
+    </div>
+  )
+}
+
+function NavLink({ href, icon, children }: { href: string; icon: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <Link
+      href={href}
+      className="px-3 py-1.5 rounded-md hover:bg-cream/10 flex items-center gap-1.5"
+    >
+      {icon}
+      {children}
+    </Link>
+  )
+}
+```
+
+### `app/admin/dashboard/page.tsx`
+
+```tsx
+import { createServerSupabase } from '@/lib/supabase/server'
+import Link from 'next/link'
+import { Package, Gavel, Trophy, AlertCircle, Plus } from 'lucide-react'
+
+export const dynamic = 'force-dynamic'
+
+export default async function AdminDashboard() {
+  const supabase = await createServerSupabase()
+
+  const [
+    totalLots,
+    activeLots,
+    closedLots,
+    extendedLots,
+    totalBids,
+  ] = await Promise.all([
+    supabase.from('lots').select('id', { count: 'exact', head: true }),
+    supabase.from('lots').select('id', { count: 'exact', head: true }).eq('status', 'active'),
+    supabase.from('lots').select('id', { count: 'exact', head: true }).eq('status', 'closed'),
+    supabase.from('lots').select('id', { count: 'exact', head: true }).eq('status', 'extended'),
+    supabase.from('bids').select('id', { count: 'exact', head: true }),
+  ])
+
+  const stats = [
+    { label: 'Total de lotes', value: totalLots.count ?? 0, icon: Package, color: 'bg-forest' },
+    { label: 'Activos', value: activeLots.count ?? 0, icon: Gavel, color: 'bg-wheat' },
+    { label: 'Con prórroga', value: extendedLots.count ?? 0, icon: AlertCircle, color: 'bg-orange-500' },
+    { label: 'Cerrados', value: closedLots.count ?? 0, icon: Trophy, color: 'bg-earth' },
+    { label: 'Total de pujas', value: totalBids.count ?? 0, icon: Gavel, color: 'bg-forest-dark' },
+  ]
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="font-display text-3xl text-forest-dark">Dashboard</h1>
+          <p className="text-earth-soft text-sm">Resumen del remate #59</p>
+        </div>
+        <Link
+          href="/admin/lotes/nuevo"
+          className="px-4 py-2 bg-forest hover:bg-forest-dark text-white font-semibold rounded-xl flex items-center gap-2"
+        >
+          <Plus className="w-4 h-4" />
+          Nuevo lote
+        </Link>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+        {stats.map(s => (
+          <div key={s.label} className="bg-white rounded-xl p-4 shadow-sm">
+            <div className={`w-9 h-9 rounded-lg ${s.color} text-white flex items-center justify-center mb-3`}>
+              <s.icon className="w-4 h-4" />
+            </div>
+            <p className="font-display text-2xl font-bold text-earth">{s.value}</p>
+            <p className="text-xs text-earth-soft">{s.label}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-white rounded-xl p-5 shadow-sm">
+        <h2 className="font-display text-xl text-forest-dark mb-4">Acciones rápidas</h2>
+        <div className="grid md:grid-cols-3 gap-3">
+          <QuickLink href="/admin/lotes" label="Ver todos los lotes" />
+          <QuickLink href="/admin/lotes/nuevo" label="Crear lote nuevo" />
+          <QuickLink href="/" label="Ver sitio público" external />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function QuickLink({ href, label, external }: { href: string; label: string; external?: boolean }) {
+  const cls = 'block p-4 rounded-lg border border-cream-dark hover:border-forest hover:bg-forest/5 transition text-sm font-medium text-earth'
+  return external ? (
+    <a href={href} target="_blank" className={cls}>{label} ↗</a>
+  ) : (
+    <Link href={href} className={cls}>{label} →</Link>
+  )
+}
+```
+
+### `app/admin/lotes/page.tsx`
+
+```tsx
+import { createServerSupabase } from '@/lib/supabase/server'
+import Link from 'next/link'
+import { Edit, Trash2, RotateCcw, Eye } from 'lucide-react'
+import { resetLot, deleteLot } from '@/app/actions/admin-lots'
+import { formatCurrency } from '@/lib/auction/rules'
+
+export const dynamic = 'force-dynamic'
+
+export default async function AdminLotsPage() {
+  const supabase = await createServerSupabase()
+  const { data: lots } = await supabase
+    .from('lots')
+    .select(`
+      *,
+      bids_count:bids(count)
+    `)
+    .order('album')
+    .order('sort_order')
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="font-display text-3xl text-forest-dark">Lotes</h1>
+          <p className="text-earth-soft text-sm">{lots?.length ?? 0} en total</p>
+        </div>
+        <Link
+          href="/admin/lotes/nuevo"
+          className="px-4 py-2 bg-forest hover:bg-forest-dark text-white font-semibold rounded-xl"
+        >
+          + Nuevo
+        </Link>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-cream-dark text-earth-soft text-xs uppercase tracking-wider">
+              <tr>
+                <th className="px-4 py-3 text-left">#</th>
+                <th className="px-4 py-3 text-left">Título</th>
+                <th className="px-4 py-3 text-left">Álbum</th>
+                <th className="px-4 py-3 text-left">Precio base</th>
+                <th className="px-4 py-3 text-left">Pujas</th>
+                <th className="px-4 py-3 text-left">Cierre</th>
+                <th className="px-4 py-3 text-left">Estado</th>
+                <th className="px-4 py-3 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-cream-dark">
+              {lots?.map(lot => (
+                <tr key={lot.id} className="hover:bg-cream/50">
+                  <td className="px-4 py-3 font-mono text-xs">{lot.id}</td>
+                  <td className="px-4 py-3 font-medium text-earth max-w-xs truncate">{lot.title}</td>
+                  <td className="px-4 py-3">{lot.album}/4</td>
+                  <td className="px-4 py-3 text-forest font-semibold">
+                    {formatCurrency(lot.starting_price)}
+                  </td>
+                  <td className="px-4 py-3">{(lot.bids_count as unknown as number) ?? 0}</td>
+                  <td className="px-4 py-3 text-xs">
+                    {new Date(lot.closing_time).toLocaleString('es-UY')}
+                  </td>
+                  <td className="px-4 py-3">
+                    <StatusBadge status={lot.status} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-1">
+                      <a
+                        href={`/lote/${lot.id}`}
+                        target="_blank"
+                        className="p-1.5 hover:bg-cream-dark rounded-md"
+                        title="Ver"
+                      >
+                        <Eye className="w-4 h-4 text-earth-soft" />
+                      </a>
+                      <Link
+                        href={`/admin/lotes/${lot.id}/editar`}
+                        className="p-1.5 hover:bg-cream-dark rounded-md"
+                        title="Editar"
+                      >
+                        <Edit className="w-4 h-4 text-earth" />
+                      </Link>
+                      <form action={resetLot.bind(null, lot.id)}>
+                        <button
+                          className="p-1.5 hover:bg-wheat-light rounded-md"
+                          title="Reiniciar pujas"
+                          disabled={lot.status === 'closed'}
+                        >
+                          <RotateCcw className="w-4 h-4 text-orange-600" />
+                        </button>
+                      </form>
+                      <form action={deleteLot.bind(null, lot.id)}>
+                        <button
+                          className="p-1.5 hover:bg-alert-soft rounded-md"
+                          title="Eliminar"
+                        >
+                          <Trash2 className="w-4 h-4 text-alert" />
+                        </button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const map = {
+    active: { label: 'Activo', cls: 'bg-forest/10 text-forest' },
+    extended: { label: 'Prórroga', cls: 'bg-orange-100 text-orange-700' },
+    closed: { label: 'Cerrado', cls: 'bg-earth/10 text-earth' },
+  } as const
+  const s = map[status as keyof typeof map] ?? map.active
+  return (
+    <span className={`px-2 py-0.5 rounded-md text-xs font-semibold ${s.cls}`}>
+      {s.label}
+    </span>
+  )
+}
+```
+
+### `app/actions/admin-lots.ts` — Server Actions CRUD
+
+```typescript
+'use server'
+import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
+import { createServerSupabase } from '@/lib/supabase/server'
+import { z } from 'zod'
+
+const ensureAdmin = async () => {
+  const c = await cookies()
+  if (c.get('admin_auth')?.value !== process.env.ADMIN_TOKEN) {
+    redirect('/admin/login')
+  }
+}
+
+const lotSchema = z.object({
+  title: z.string().min(3).max(200),
+  description: z.string().optional(),
+  starting_price: z.number().positive(),
+  album: z.number().int().min(1).max(4),
+  image_urls: z.array(z.string().url()).min(1),
+  base_closing_time: z.string().datetime(),
+  sort_order: z.number().int().default(0),
+})
+
+export async function createLot(formData: FormData) {
+  await ensureAdmin()
+  const raw = {
+    title: formData.get('title') as string,
+    description: (formData.get('description') as string) || undefined,
+    starting_price: Number(formData.get('starting_price')),
+    album: Number(formData.get('album')),
+    image_urls: (formData.get('image_urls') as string).split('\n').map(s => s.trim()).filter(Boolean),
+    base_closing_time: formData.get('base_closing_time') as string,
+    sort_order: Number(formData.get('sort_order') || 0),
+  }
+
+  const parsed = lotSchema.safeParse(raw)
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0].message }
+  }
+
+  const supabase = await createServerSupabase()
+  const { data, error } = await supabase.from('lots').insert({
+    ...parsed.data,
+    closing_time: parsed.data.base_closing_time,
+    status: 'active',
+  }).select('id').single()
+
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/admin/lotes')
+  revalidatePath('/')
+  redirect(`/admin/lotes/${data.id}/editar`)
+}
+
+export async function updateLot(id: number, formData: FormData) {
+  await ensureAdmin()
+  const raw = {
+    title: formData.get('title') as string,
+    description: (formData.get('description') as string) || undefined,
+    starting_price: Number(formData.get('starting_price')),
+    album: Number(formData.get('album')),
+    image_urls: (formData.get('image_urls') as string).split('\n').map(s => s.trim()).filter(Boolean),
+    base_closing_time: formData.get('base_closing_time') as string,
+    sort_order: Number(formData.get('sort_order') || 0),
+  }
+
+  const parsed = lotSchema.safeParse(raw)
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message }
+
+  const supabase = await createServerSupabase()
+  const { error } = await supabase.from('lots').update({
+    ...parsed.data,
+    updated_at: new Date().toISOString(),
+  }).eq('id', id)
+
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/admin/lotes')
+  revalidatePath(`/lote/${id}`)
+  revalidatePath('/')
+  return { ok: true }
+}
+
+export async function resetLot(id: number) {
+  await ensureAdmin()
+  const supabase = await createServerSupabase()
+
+  // Obtener base_closing_time para restaurarlo
+  const { data: lot } = await supabase.from('lots').select('base_closing_time').eq('id', id).single()
+  if (!lot) return
+
+  await supabase.from('bids').delete().eq('lot_id', id)
+  await supabase.from('lots').update({
+    closing_time: lot.base_closing_time,
+    status: 'active',
+    winner_bid_id: null,
+    updated_at: new Date().toISOString(),
+  }).eq('id', id)
+
+  revalidatePath('/admin/lotes')
+  revalidatePath(`/lote/${id}`)
+  revalidatePath('/')
+}
+
+export async function deleteLot(id: number) {
+  await ensureAdmin()
+  const supabase = await createServerSupabase()
+  await supabase.from('bids').delete().eq('lot_id', id)
+  await supabase.from('lots').delete().eq('id', id)
+  revalidatePath('/admin/lotes')
+  revalidatePath('/')
+}
+
+export async function adminLogout() {
+  ;(await cookies()).delete('admin_auth')
+  redirect('/admin/login')
+}
+```
+
+> **⚠️ Ajuste necesario en `app/actions/admin.ts`** (el que te di antes) — agregá la generación de `ADMIN_TOKEN` consistente:
+> ```typescript
+> // Comparar así:
+> const expected = crypto
+>   .createHmac('sha256', process.env.ADMIN_SECRET || 'dev-secret')
+>   .update(u + p).digest('hex')
+> ;(await cookies()).set('admin_auth', expected, {...})
+> ```
+
+### `app/admin/lotes/nuevo/page.tsx` y `app/admin/lotes/[id]/editar/page.tsx`
+
+```tsx
+// app/admin/lotes/nuevo/page.tsx
+import { LotForm } from '@/components/admin/LotForm'
+import { createLot } from '@/app/actions/admin-lots'
+
+export default function NuevoLotePage() {
+  return (
+    <div>
+      <h1 className="font-display text-3xl text-forest-dark mb-6">Nuevo lote</h1>
+      <LotForm action={createLot} />
+    </div>
+  )
+}
+```
+
+```tsx
+// app/admin/lotes/[id]/editar/page.tsx
+import { notFound } from 'next/navigation'
+import { createServerSupabase } from '@/lib/supabase/server'
+import { LotForm } from '@/components/admin/LotForm'
+import { updateLot } from '@/app/actions/admin-lots'
+
+export default async function EditarLotePage({ params }: { params: { id: string } }) {
+  const supabase = await createServerSupabase()
+  const { data: lot } = await supabase.from('lots').select('*').eq('id', Number(params.id)).single()
+  if (!lot) notFound()
+
+  return (
+    <div>
+      <h1 className="font-display text-3xl text-forest-dark mb-2">Editar lote #{lot.id}</h1>
+      <p className="text-earth-soft text-sm mb-6">{lot.title}</p>
+      <LotForm action={updateLot.bind(null, lot.id)} initialData={lot} />
+    </div>
+  )
+}
+```
+
+### `components/admin/LotForm.tsx`
+
+```tsx
+'use client'
+import { useTransition } from 'react'
+import { useRouter } from 'next/navigation'
+import type { Lot } from '@/types'
+
+interface Props {
+  action: (formData: FormData) => Promise<any>
+  initialData?: Partial<Lot>
+}
+
+export function LotForm({ action, initialData }: Props) {
+  const [isPending, startTransition] = useTransition()
+  const router = useRouter()
+
+  const handleSubmit = (formData: FormData) => {
+    startTransition(async () => {
+      const res = await action(formData)
+      if (res?.ok === false) {
+        alert('Error: ' + res.error)
+      }
+    })
+  }
+
+  // Default: próximo martes 20:00
+  const defaultClosing = initialData?.base_closing_time
+    ? new Date(initialData.base_closing_time).toISOString().slice(0, 16)
+    : getNextTuesday20()
+
+  return (
+    <form action={handleSubmit} className="bg-white rounded-2xl p-6 shadow-sm max-w-3xl space-y-5">
+      <Field label="Título del lote *" name="title" required
+        defaultValue={initialData?.title} placeholder="Ej: Tractor John Deere 6130J" />
+
+      <Field label="Descripción" name="description" textarea
+        defaultValue={initialData?.description ?? ''}
+        placeholder="Detalles, estado, año, horas de uso..." />
+
+      <div className="grid md:grid-cols-2 gap-4">
+        <Field label="Precio de partida (US$) *" name="starting_price" type="number" step="1" required
+          defaultValue={initialData?.starting_price?.toString()} />
+
+        <div>
+          <label className="block text-sm font-semibold text-earth mb-1">Álbum *</label>
+          <select name="album" required defaultValue={initialData?.album ?? 1}
+            className="w-full px-3 py-2 rounded-lg border border-cream-dark focus:border-forest outline-none">
+            <option value="1">Álbum 1/4</option>
+            <option value="2">Álbum 2/4</option>
+            <option value="3">Álbum 3/4</option>
+            <option value="4">Álbum 4/4</option>
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-semibold text-earth mb-1">
+          URLs de imágenes * (una por línea)
+        </label>
+        <textarea
+          name="image_urls"
+          rows={4}
+          required
+          defaultValue={initialData?.image_urls?.join('\n') ?? ''}
+          placeholder="https://..."
+          className="w-full px-3 py-2 rounded-lg border border-cream-dark focus:border-forest outline-none font-mono text-xs"
+        />
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        <Field label="Fecha y hora de cierre *" name="base_closing_time" type="datetime-local"
+          required defaultValue={defaultClosing} />
+        <Field label="Orden dentro del álbum" name="sort_order" type="number"
+          defaultValue={(initialData?.sort_order ?? 0).toString()} />
+      </div>
+
+      <div className="flex gap-3 pt-4 border-t border-cream-dark">
+        <button
+          type="submit"
+          disabled={isPending}
+          className="px-6 py-2.5 bg-forest hover:bg-forest-dark text-white font-semibold rounded-xl disabled:opacity-60"
+        >
+          {isPending ? 'Guardando...' : '💾 Guardar lote'}
+        </button>
+        <button
+          type="button"
+          onClick={() => router.back()}
+          className="px-6 py-2.5 bg-cream-dark hover:bg-cream text-earth font-semibold rounded-xl"
+        >
+          Cancelar
+        </button>
+      </div>
+    </form>
+  )
+}
+
+function Field({
+  label, name, type = 'text', textarea, required, defaultValue, placeholder, step,
+}: {
+  label: string; name: string; type?: string; textarea?: boolean
+  required?: boolean; defaultValue?: string; placeholder?: string; step?: string
+}) {
+  const cls = 'w-full px-3 py-2 rounded-lg border border-cream-dark focus:border-forest outline-none'
+  return (
+    <div>
+      <label className="block text-sm font-semibold text-earth mb-1">{label}</label>
+      {textarea ? (
+        <textarea name={name} rows={3} defaultValue={defaultValue} placeholder={placeholder} className={cls} />
+      ) : (
+        <input
+          type={type} name={name} required={required}
+          defaultValue={defaultValue} placeholder={placeholder} step={step}
+          className={cls}
+        />
+      )}
+    </div>
+  )
+}
+
+function getNextTuesday20() {
+  const now = new Date()
+  const day = now.getDay()
+  const daysUntilTuesday = (2 - day + 7) % 7 || 7
+  const next = new Date(now)
+  next.setDate(now.getDate() + daysUntilTuesday)
+  next.setHours(20, 0, 0, 0)
+  return next.toISOString().slice(0, 16)
+}
+```
+
+---
+
+## 🧪 5. Tests unitarios
+
+### `__tests__/auction-rules.test.ts`
+
+```typescript
+import { describe, it, expect } from 'vitest'
+import { AUCTION_RULES } from '../lib/auction/rules'
+
+describe('AUCTION_RULES.getIncrement', () => {
+  it('retorna 10 para precios de partida < 200', () => {
+    expect(AUCTION_RULES.getIncrement(50)).toBe(10)
+    expect(AUCTION_RULES.getIncrement(199)).toBe(10)
+  })
+
+  it('retorna 50 para precios entre 200 y 5000', () => {
+    expect(AUCTION_RULES.getIncrement(200)).toBe(50)
+    expect(AUCTION_RULES.getIncrement(5000)).toBe(50)
+  })
+
+  it('retorna 100 para precios > 5000', () => {
+    expect(AUCTION_RULES.getIncrement(5001)).toBe(100)
+    expect(AUCTION_RULES.getIncrement(50000)).toBe(100)
+  })
+
+  // Caso clave del reglamento: incluso si supera los 200,
+  // sigue de a 10 porque el PRECIO DE PARTIDA era < 200
+  it('regla del reglamento: incremento fijo según partida, no precio actual', () => {
+    expect(AUCTION_RULES.getIncrement(150)).toBe(10) // aunque luego el precio actual sea 250
+  })
+})
+
+describe('AUCTION_RULES.getNextBid', () => {
+  it('primera puja: retorna el precio de partida', () => {
+    expect(AUCTION_RULES.getNextBid(0, 100)).toBe(100)
+    expect(AUCTION_RULES.getNextBid(50, 100)).toBe(100)
+  })
+
+  it('pujas siguientes: precio actual + incremento', () => {
+    expect(AUCTION_RULES.getNextBid(100, 100)).toBe(110)
+    expect(AUCTION_RULES.getNextBid(500, 200)).toBe(550)
+    expect(AUCTION_RULES.getNextBid(6000, 5500)).toBe(6100)
+  })
+})
+
+describe('AUCTION_RULES.getQuickBids', () => {
+  it('genera 3 opciones: +1, +3, +5 incrementos', () => {
+    const bids = AUCTION_RULES.getQuickBids(100, 100)
+    expect(bids).toEqual([110, 130, 150])
+  })
+})
+
+describe('AUCTION_RULES.getCommission', () => {
+  it('contado 12%', () => {
+    const r = AUCTION_RULES.getCommission(1000, 'cash')
+    expect(r.commission).toBe(120)
+    expect(r.total).toBe(1120)
+  })
+
+  it('Mercado Pago 19%', () => {
+    const r = AUCTION_RULES.getCommission(1000, 'mercadopago')
+    expect(r.commission).toBe(190)
+    expect(r.total).toBe(1190)
+  })
+})
+
+describe('AUCTION_RULES.getCountdownState', () => {
+  it('safe si > 10 min', () => expect(AUCTION_RULES.getCountdownState(700)).toBe('safe'))
+  it('warning entre 1 y 10 min', () => expect(AUCTION_RULES.getCountdownState(300)).toBe('warning'))
+  it('critical si < 1 min', () => expect(AUCTION_RULES.getCountdownState(30)).toBe('critical'))
+})
+
+describe('AUCTION_RULES.isInGracePeriod', () => {
+  it('true si ahora está en la última hora antes del cierre base', () => {
+    const base = new Date('2026-05-19T20:00:00Z')
+    expect(AUCTION_RULES.isInGracePeriod(new Date('2026-05-19T19:30:00Z'), base)).toBe(true)
+    expect(AUCTION_RULES.isInGracePeriod(new Date('2026-05-19T19:00:00Z'), base)).toBe(true)
+  })
+
+  it('false si aún falta más de 1 hora', () => {
+    const base = new Date('2026-05-19T20:00:00Z')
+    expect(AUCTION_RULES.isInGracePeriod(new Date('2026-05-19T18:59:59Z'), base)).toBe(false)
+  })
+})
+```
+
+> Instalá: `npm i -D vitest`
+> Configurá en `package.json`:
+> ```json
+> "scripts": { "test": "vitest" }
+> ```
+
+### `__tests__/bid-rpc.test.ts` (lógica del RPC simulada en JS)
+
+```typescript
+import { describe, it, expect } from 'vitest'
+import { AUCTION_RULES } from '../lib/auction/rules'
+
+// Simulador en memoria de la función place_bid para testear reglas sin DB
+function simulatePlaceBid(opts: {
+  startingPrice: number
+  currentPrice: number
+  bidAmount: number
+  lotStatus: 'active' | 'extended' | 'closed'
+  closingTime: Date
+  baseClosingTime: Date
+  now: Date
+  bidderHasPriorBid: boolean
+}) {
+  if (opts.lotStatus === 'closed') {
+    return { ok: false, error: 'Este lote ya cerró' }
+  }
+
+  const increment = AUCTION_RULES.getIncrement(opts.startingPrice)
+  const minBid = opts.currentPrice < opts.startingPrice
+    ? opts.startingPrice
+    : opts.currentPrice + increment
+
+  if (opts.bidAmount < minBid) {
+    return { ok: false, error: `La puja mínima es US$ ${minBid}` }
+  }
+
+  const graceCutoff = new Date(opts.baseClosingTime.getTime() - 60 * 60 * 1000)
+  if (opts.now >= graceCutoff && !opts.bidderHasPriorBid) {
+    return { ok: false, error: 'Debe haber ofertado antes de las 19:00' }
+  }
+
+  const tenMinBeforeClose = new Date(opts.closingTime.getTime() - 10 * 60 * 1000)
+  const extended = opts.now >= tenMinBeforeClose
+  const newClosing = extended
+    ? new Date(opts.now.getTime() + 10 * 60 * 1000)
+    : opts.closingTime
+
+  return { ok: true, newPrice: opts.bidAmount, extended, newClosing }
+}
+
+describe('Simulación RPC place_bid', () => {
+  const baseClosing = new Date('2026-05-19T20:00:00Z')
+
+  it('rechaza si el lote ya cerró', () => {
+    const r = simulatePlaceBid({
+      startingPrice: 100, currentPrice: 100, bidAmount: 100,
+      lotStatus: 'closed', closingTime: baseClosing, baseClosingTime: baseClosing,
+      now: new Date('2026-05-19T20:05:00Z'), bidderHasPriorBid: false,
+    })
+    expect(r.ok).toBe(false)
+  })
+
+  it('acepta primera puja igual al precio de partida', () => {
+    const r = simulatePlaceBid({
+      startingPrice: 100, currentPrice: 0, bidAmount: 100,
+      lotStatus: 'active', closingTime: baseClosing, baseClosingTime: baseClosing,
+      now: new Date('2026-05-19T17:00:00Z'), bidderHasPriorBid: false,
+    })
+    expect(r.ok).toBe(true)
+  })
+
+  it('rechaza puja menor al incremento', () => {
+    const r = simulatePlaceBid({
+      startingPrice: 100, currentPrice: 100, bidAmount: 105,
+      lotStatus: 'active', closingTime: baseClosing, baseClosingTime: baseClosing,
+      now: new Date('2026-05-19T17:00:00Z'), bidderHasPriorBid: false,
+    })
+    expect(r.ok).toBe(false)
+  })
+
+  it('rechaza si está en última hora sin puja previa', () => {
+    const r = simulatePlaceBid({
+      startingPrice: 100, currentPrice: 100, bidAmount: 110,
+      lotStatus: 'active', closingTime: baseClosing, baseClosingTime: baseClosing,
+      now: new Date('2026-05-19T19:30:00Z'), bidderHasPriorBid: false,
+    })
+    expect(r.ok).toBe(false)
+  })
+
+  it('acepta si está en última hora CON puja previa', () => {
+    const r = simulatePlaceBid({
+      startingPrice: 100, currentPrice: 100, bidAmount: 110,
+      lotStatus: 'active', closingTime: baseClosing, baseClosingTime: baseClosing,
+      now: new Date('2026-05-19T19:30:00Z'), bidderHasPriorBid: true,
+    })
+    expect(r.ok).toBe(true)
+  })
+
+  it('extiende 10 min si la puja llega en los últimos 10 min', () => {
+    const r = simulatePlaceBid({
+      startingPrice: 100, currentPrice: 100, bidAmount: 110,
+      lotStatus: 'active', closingTime: baseClosing, baseClosingTime: baseClosing,
+      now: new Date('2026-05-19T19:55:00Z'), bidderHasPriorBid: true,
+    })
+    expect(r.ok).toBe(true)
+    expect(r.extended).toBe(true)
+    expect((r as any).newClosing.toISOString()).toBe('2026-05-19T20:05:00.000Z')
+  })
+})
+```
+
+Ejecutá con: `npm test`
+
+---
+
+## ⚙️ 6. Utilidades y configuración
+
+### `types/database.ts`
+
+```typescript
+// Tipos derivados del schema - podés regenerar con:
+// npx supabase gen types typescript --project-id <id> > types/database.ts
+
+export type Database = {
+  public: {
+    Tables: {
+      lots: {
+        Row: {
+          id: number
+          title: string
+          description: string | null
+          starting_price: number
+          album: 1 | 2 | 3 | 4
+          image_urls: string[]
+          base_closing_time: string
+          closing_time: string
+          status: 'active' | 'extended' | 'closed'
+          winner_bid_id: number | null
+          sort_order: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['lots']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Database['public']['Tables']['lots']['Insert']>
+      }
+      bids: {
+        Row: {
+          id: number
+          lot_id: number
+          bidder_name: string
+          bidder_session_id: string
+          amount: number
+          created_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['bids']['Row'], 'id' | 'created_at'>
+        Update: Partial<Database['public']['Tables']['bids']['Insert']>
+      }
+      bidders: {
+        Row: {
+          session_id: string
+          name: string
+          phone: string | null
+          created_at: string
+        }
+        Insert: Database['public']['Tables']['bidders']['Row']
+        Update: Partial<Database['public']['Tables']['bidders']['Insert']>
+      }
+    }
+    Functions: {
+      place_bid: {
+        Args: {
+          p_lot_id: number
+          p_amount: number
+          p_bidder_name: string
+          p_session_id: string
+          p_phone?: string | null
+        }
+        Returns: {
+          ok: boolean
+          bid_id?: number
+          new_price?: number
+          extended?: boolean
+          new_closing_time?: string
+          error?: string
+        }
+      }
+      close_lot: {
+        Args: { p_lot_id: number }
+        Returns: { ok: boolean; winner?: string; amount?: number; message?: string }
+      }
+      get_bid_increment: {
+        Args: { starting_price: number }
+        Returns: number
+      }
+    }
+  }
+}
+```
+
+### `.env.example`
+
+```bash
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+SUPABASE_SERVICE_ROLE_KEY=eyJ...
+
+# Admin
+ADMIN_USER=admin
+ADMIN_PASS=cambiame_esto_por_algo_seguro
+ADMIN_SECRET=un_string_random_de_64_caracteres_para_firmar_cookies
+
+# Opcional
+NEXT_PUBLIC_WHATSAPP_NUMBER=59896125030
+```
+
+### `public/placeholder-tractor.jpg`
+
+> Subí cualquier imagen 1200×900 a `public/placeholder-tractor.jpg` para que las tarjetas sin foto tengan un fallback decente. O reemplazá la URL por una de Unsplash: `https://images.unsplash.com/photo-...`
+
+### `supabase/cron-close-lots.sql` (Edge Function opcional)
+
+```sql
+-- Programar para correr cada minuto desde Supabase Dashboard → Database → Cron
+-- Cierra lotes cuya closing_time ya pasó y aún están como 'active'/'extended'
+
+select
+  cron.schedule(
+    'close-finished-lots',
+    '* * * * *',
+    $$
+    update public.lots
+    set status = 'closed', updated_at = now()
+    where status in ('active', 'extended')
+      and closing_time <= now();
+    $$
+  );
+```
+
+> ⚠️ Requiere la extensión `pg_cron` habilitada. Si el plan gratuito no la soporta, podés crear un cron en Vercel que llame a `/api/cron/close-lots` (endpoint protegido con `CRON_SECRET`).
+
+### `app/api/cron/close-lots/route.ts` (alternativa Vercel Cron)
+
+```typescript
+import { NextRequest, NextResponse } from 'next/server'
+import { createServerSupabase } from '@/lib/supabase/server'
+
+export async function GET(req: NextRequest) {
+  const auth = req.headers.get('authorization')
+  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const supabase = await createServerSupabase()
+  const { data: expired } = await supabase
+    .from('lots').select('id')
+    .in('status', ['active', 'extended'])
+    .lte('closing_time', new Date().toISOString())
+
+  for (const lot of expired ?? []) {
+    await supabase.rpc('close_lot', { p_lot_id: lot.id })
+  }
+
+  return NextResponse.json({ closed: expired?.length ?? 0 })
+}
+```
+
+Configurá en `vercel.json`:
+
+```json
+{
+  "crons": [{ "path": "/api/cron/close-lots", "schedule": "* * * * *" }]
+}
+```
+
+---
+
+## ✅ Checklist final de archivos entregados
+
+**En este mensaje (complementarios):**
+- [x] 3 componentes UI (`toast`, `use-toast`, `toaster`) + `lib/utils.ts`
+- [x] 7 componentes auction (`HeroBanner`, `LiveTicker`, `AlbumTabs`, `LotGrid`, `ImageGallery`, `BidHistory`, `WinnerBanner`, `CountdownBadge`)
+- [x] 2 páginas (`/reglamento`, `/ganadores`)
+- [x] Admin completo (layout, dashboard, lista, formulario, CRUD server actions)
+- [x] 2 suites de tests
+- [x] `types/database.ts`, `.env.example`, cron de cierre
+
+**En el mensaje anterior (core):**
+- [x] Schema SQL + RPC atómico
+- [x] Layout raíz + globals.css
+- [x] `/page.tsx` home
+- [x] `/lote/[id]/page.tsx` detalle
+- [x] `LotCard`, `CountdownTimer`, `BidPanel`, `RealtimeLotSubscriber`
+- [x] `BidderProvider`, `lib/sounds.ts`, `lib/auction/rules.ts`
+- [x] Server Action `placeBid`
+- [x] Middleware + login admin
+- [x] `package.json` + `README.md`
+
+---
+
+## 🚀 Para arrancar YA
+
+```bash
+# 1. Clonar / crear proyecto Next 14
+npx create-next-app@14 remate-agricola --ts --tailwind --app --src-dir=false
+cd remate-agricola
+
+# 2. Instalar deps
+npm i @supabase/supabase-js @supabase/ssr framer-motion lucide-react zod clsx tailwind-merge class-variance-authority
+npm i -D vitest
+
+# 3. Copiar todos los archivos entregados en sus rutas
+
+# 4. Crear proyecto Supabase y correr migrations.sql
+
+# 5. Cargar variables en .env.local (copiar de .env.example)
+
+# 6. Correr
+npm run dev     # → http://localhost:3000
+npm test        # → corre los tests
+```

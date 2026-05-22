@@ -1,0 +1,189 @@
+/* filepath: d:/PROYECTOS/REMATE CAMPO/app/globals.css */
+/* @visual: tailwind-patterns - Arquitectura CSS-First de Tailwind v4 y diseño editorial premium en oklch */
+
+@import "tailwindcss";
+
+@theme {
+  /* === PALETA PRINCIPAL (oklch) === */
+  --color-forest-50: oklch(0.97 0.015 130);
+  --color-forest-100: oklch(0.92 0.04 130);
+  --color-forest-300: oklch(0.70 0.12 130);
+  --color-forest-500: oklch(0.48 0.14 130);  /* Principal */
+  --color-forest-700: oklch(0.32 0.12 130);
+  --color-forest-900: oklch(0.20 0.08 130);
+
+  --color-wheat-50: oklch(0.98 0.02 80);
+  --color-wheat-200: oklch(0.88 0.08 80);
+  --color-wheat-400: oklch(0.78 0.14 75);   /* Dorado trigo */
+  --color-wheat-600: oklch(0.62 0.14 70);
+
+  --color-earth-50: oklch(0.97 0.01 60);
+  --color-earth-200: oklch(0.85 0.03 60);
+  --color-earth-500: oklch(0.45 0.05 55);
+  --color-earth-800: oklch(0.28 0.04 55);
+  --color-earth-950: oklch(0.15 0.03 55);
+
+  --color-cream: oklch(0.98 0.008 80);
+  --color-cream-warm: oklch(0.96 0.015 80);
+
+  --color-alert: oklch(0.58 0.22 25);
+  --color-success: oklch(0.65 0.18 140);
+
+  /* === COMPATIBILIDAD CON CLASES EXISTENTES === */
+  --color-forest: var(--color-forest-500);
+  --color-forest-dark: var(--color-forest-700);
+  --color-wheat: var(--color-wheat-400);
+  --color-earth: var(--color-earth-800);
+
+  /* === TIPOGRAFÍA === */
+  --font-display: 'Outfit', 'Inter', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* === RADII === */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1.25rem;
+  --radius-xl: 1.75rem;
+
+  /* === SOMBRAS (HSL fluidas) === */
+  --shadow-subtle: 0 1px 2px oklch(0.20 0.03 55 / 0.04);
+  --shadow-soft: 0 4px 12px oklch(0.20 0.03 55 / 0.06);
+  --shadow-card: 0 12px 32px oklch(0.20 0.03 55 / 0.08), 0 2px 6px oklch(0.20 0.03 55 / 0.04);
+  --shadow-glow-forest: 0 8px 24px oklch(0.48 0.14 130 / 0.25);
+  --shadow-glow-wheat: 0 8px 24px oklch(0.78 0.14 75 / 0.3);
+
+  /* === ANIMACIONES === */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-slow: 400ms;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    font-family: var(--font-body);
+    background: var(--color-cream);
+    color: var(--color-earth-950);
+    background-image:
+      radial-gradient(ellipse at top, var(--color-wheat-50), transparent 50%),
+      radial-gradient(ellipse at bottom, var(--color-forest-50), transparent 50%);
+    background-attachment: fixed;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+    font-weight: 700;
+  }
+
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Focus rings accesibles */
+  *:focus-visible {
+    outline: 2px solid var(--color-forest-500);
+    outline-offset: 2px;
+  }
+}
+
+/* Clases de utilidad y efectos premium */
+.glassmorphism {
+  background: oklch(0.98 0.008 80 / 0.90);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid oklch(0.20 0.03 55 / 0.08);
+}
+
+.glassmorphism-dark {
+  background: oklch(0.20 0.08 130 / 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid oklch(0.78 0.14 75 / 0.15);
+}
+
+/* Animaciones fluidas premium de micro-interacciones */
+.transition-premium {
+  transition: all var(--duration-normal) var(--ease-smooth);
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.4;
+  }
+  100% {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
+}
+
+.animate-pulse-ring {
+  animation: pulse-ring 2s infinite ease-in-out;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.animate-float {
+  animation: float 3s infinite ease-in-out;
+}
+
+/* Skeletons animados premium */
+.skeleton-premium {
+  background: linear-gradient(
+    90deg,
+    var(--color-cream-warm) 25%,
+    rgba(232, 184, 109, 0.2) 37%,
+    var(--color-cream-warm) 63%
+  );
+  background-size: 400% 100%;
+  animation: skeleton-loading 1.4s ease infinite;
+}
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes marquee {
+  0% { transform: translateX(0%); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Scrollbar thin utility */
+.scrollbar-thin::-webkit-scrollbar { height: 4px; }
+.scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: oklch(0.70 0.03 55 / 0.3); border-radius: 2px; }
+

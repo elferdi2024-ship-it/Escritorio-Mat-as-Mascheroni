@@ -1,0 +1,1005 @@
+# 🚀 DEPLOY AVANZADO — Sales Kit Completo
+
+Este documento está pensado para **vos como freelancer/agencia**, no para el cliente final. Te va a servir para:
+
+1. 🎯 Tener una **demo funcional en 15 minutos** (sin dominio, sin nada)
+2. 💼 **Vender el proyecto** a múltiples clientes
+3. 🎨 **Personalizar rápido** el branding para cada uno
+4. 📦 Hacer **handoff profesional** cuando se concrete la venta
+5. 💰 **Cobrar bien** con un modelo de pricing claro
+
+---
+
+## 📑 Índice
+
+1. [Fase 1 — Deploy de DEMO (15 min)](#fase-1)
+2. [Fase 2 — Preparar la demo perfecta](#fase-2)
+3. [Fase 3 — El pitch de venta](#fase-3)
+4. [Fase 4 — Personalización multi-cliente](#fase-4)
+5. [Fase 5 — Handoff al cliente](#fase-5)
+6. [Fase 6 — Modelo de pricing](#fase-6)
+7. [Fase 7 — Soporte post-venta](#fase-7)
+8. [Bonus — Plantillas y scripts](#bonus)
+
+---
+
+<a id="fase-1"></a>
+## 🎯 FASE 1 — Deploy de DEMO (15 minutos)
+
+> **Objetivo:** Tener una URL pública funcional para mostrar al cliente, SIN dominio propio, SIN costos, SIN configuración avanzada.
+
+### 1.1 Script automatizado de setup
+
+Creá un archivo `scripts/demo-setup.sh` en tu repo:
+
+```bash
+#!/bin/bash
+# scripts/demo-setup.sh
+# Crea una demo completa en 5 minutos
+
+set -e
+echo "🚜 Setup de Remate Virtual Agrícola - Modo DEMO"
+echo "================================================"
+
+# 1. Crear proyecto Next.js si no existe
+if [ ! -d "remate-demo" ]; then
+  echo "📦 Creando proyecto Next.js..."
+  npx create-next-app@14 remate-demo --ts --tailwind --app --no-src-dir --eslint
+  cd remate-demo
+else
+  cd remate-demo
+  echo "📦 Proyecto ya existe, saltando..."
+fi
+
+# 2. Instalar dependencias
+echo "📦 Instalando dependencias..."
+npm i @supabase/supabase-js @supabase/ssr framer-motion lucide-react zod \
+      clsx tailwind-merge class-variance-authority @react-pdf/renderer
+npm i -D vitest
+
+# 3. Crear estructura de carpetas
+echo "📁 Creando estructura..."
+mkdir -p components/{auction,ui,layout,admin,analytics,search,pwa}
+mkdir -p lib/{supabase,auction,notifications,sounds}
+mkdir -p app/{lote,admin,reglamento,ganadores,api}
+mkdir -p app/lote/\[id\]
+mkdir -p app/admin/{dashboard,lotes,analytics,login}
+mkdir -p app/admin/lotes/{nuevo,\[id\]/editar}
+mkdir -p app/api/{cron,webhooks,analytics}
+mkdir -p supabase
+mkdir -p public/icons
+mkdir -p types
+mkdir -p __tests__
+
+echo ""
+echo "✅ Estructura creada. Ahora:"
+echo "   1. Copiá todos los archivos del kit en sus rutas"
+echo "   2. Creá un proyecto en https://supabase.com (región São Paulo)"
+echo "   3. Ejecutá supabase/setup.sql en el SQL Editor"
+echo "   4. Habilitá Realtime para 'lots' y 'bids'"
+echo "   5. Copiá las keys a .env.local"
+echo "   6. Deploy a Vercel: 'vercel --prod'"
+echo ""
+echo "🎯 Tiempo estimado: 15 minutos hasta tener URL pública"
+```
+
+Dale permisos y ejecutalo:
+```bash
+chmod +x scripts/demo-setup.sh
+./scripts/demo-setup.sh
+```
+
+### 1.2 Deploy ultra-rápido a Vercel (sin CLI)
+
+Si no querés instalar Vercel CLI:
+
+1. Subí tu repo a GitHub (puede ser **privado**, Vercel lo soporta)
+2. Andá a https://vercel.com/new
+3. Click en **"Import Git Repository"** → elegí tu repo
+4. Framework: **Next.js** (autodetectado)
+5. Variables de entorno (las cargás en la UI de Vercel):
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+SUPABASE_SERVICE_ROLE_KEY=eyJ...
+ADMIN_USER=demo
+ADMIN_PASS=demo2026
+ADMIN_SECRET=string_random_largo_para_firmar_cookies
+CRON_SECRET=otro_string_random
+NEXT_PUBLIC_SITE_URL=https://tu-proyecto.vercel.app
+NEXT_PUBLIC_WHATSAPP_NUMBER=59896125030
+```
+
+6. Click **Deploy** → en ~2 minutos tenés URL tipo `remate-agro-demo.vercel.app`
+
+### 1.3 Generar URL de demo "pro"
+
+Vercel te da URLs tipo `remate-agro-xxx.vercel.app`. Para tener algo más pro **sin dominio propio**:
+
+**Opción A — Subdominio personalizado de Vercel (gratis)**
+- Vercel → Settings → Domains → Add
+- Poné algo como `demo-remates-agricolas.vercel.app` (si está libre)
+
+**Opción B — Preview URL con nombre del cliente**
+Cada vez que hagas un deploy de una rama (`git push origin cliente-juan`), Vercel genera una URL única:
+```
+remate-agro-git-cliente-juan-tu-user.vercel.app
+```
+
+**Opción C — Usar un dominio `.vercel.app` genérico**
+Comprá una vez un dominio tipo `remates-agro.app` y creá subdominios para cada cliente:
+```
+juan.remates-agro.app
+pedro.remates-agro.app
+demo.remates-agro.app
+```
+
+> 💡 **Recomendación:** Opción C. Un dominio `.app` cuesta ~US$ 15/año y te da branding profesional sin que el cliente necesite comprar nada aún.
+
+---
+
+<a id="fase-2"></a>
+## 🎬 FASE 2 — Preparar la demo perfecta
+
+### 2.1 Datos de demo realistas
+
+El `seed.sql` ya te carga 20 lotes + 16 pujas. Pero para la demo, **cargá 2-3 lotes extra específicos** que sepas que van a impactar al cliente. Ejemplo:
+
+```sql
+-- Lote "gancho" con puja dramática en vivo
+insert into lots (title, description, starting_price, album, image_urls, base_closing_time, closing_time, sort_order)
+values (
+  'Tractor Zetor Major 80 - OPORTUNIDAD ÚNICA',
+  'Año 2020 · Solo 800 hs · Documentación al día · Se vende por cese de actividad. Valor real: US$ 35.000',
+  18000, 1,
+  array['https://images.unsplash.com/photo-1592982537447-7440770cbfc9?w=1200'],
+  now() + interval '15 minutes',  -- ⚡ CIERRA EN 15 MIN DE ABRIR LA DEMO
+  now() + interval '15 minutes',
+  99
+);
+```
+
+> ⚠️ **Truco:** poné `closing_time = now() + 15 minutos` para que cuando abras la demo en la reunión, haya **tensión de tiempo real** y el countdown esté en estado "warning" amarillo.
+
+### 2.2 Script de la demo en vivo (10 minutos)
+
+**Minuto 0-1: Presentación**
+> "Te voy a mostrar una plataforma nivel Ritchie Bros (que factura US$ 6 billones al año) pero adaptada al mercado uruguayo. Todo funciona en tiempo real."
+
+**Minuto 1-3: Home + álbumes**
+- Abrí la home en **desktop** (pantalla grande)
+- Mostrá el hero, los 4 álbumes, el ticker en vivo
+- Click en el lote "gancho" que cierra en 15 min
+
+**Minuto 3-5: Detalle del lote + cronómetro**
+- Mostrá el countdown amarillo (warning)
+- Explicá: "El reloj es el servidor, no el del cliente. Imposible de hackear"
+- Galería con lightbox, swipe
+- Historial de pujas
+
+**Minuto 5-7: Pujar EN VIVO (el momento wow)**
+- **Abrí 2 ventanas del navegador** (una en desktop, otra en modo mobile responsive con DevTools)
+- En la ventana 1: hacé una puja con nombre "Juan P."
+- Mostrá cómo la ventana 2 se actualiza **sola** con sonido
+- Explicá: "Esto es Supabase Realtime, la misma tecnología que usa Discord"
+
+**Minuto 7-8: Prórroga automática**
+- Esperá a que queden < 10 minutos
+- Pujá de nuevo → el cronómetro salta a +10 min
+- "El sistema extiende automáticamente para que nadie pierda en el último segundo. Exactamente como Sotheby's"
+
+**Minuto 8-9: Admin**
+- Login en `/admin` (demo/demo2026)
+- Dashboard con stats
+- Crear lote en vivo (30 segundos)
+- Mostrar que las reglas se aplican automáticamente
+
+**Minuto 9-10: Mobile + cierre**
+- Mostrá la demo en **tu celular real** (compartí pantalla)
+- "Los chacareros van a usar esto desde el celular en el campo"
+- "Esto corre en Vercel gratis. Costo mensual para vos: CERO hasta 50.000 visitas"
+
+### 2.3 Plan B si falla internet en la reunión
+
+**SIEMPRE** tené grabado un video demo de 5 minutos:
+
+```bash
+# Opción 1: Loom (gratis, 5 min)
+# Grabá mientras narrás el script de arriba
+
+# Opción 2: OBS + YouTube (sin límite)
+# Subilo como "no listado" y mostralo desde YouTube
+```
+
+Además, llevá el proyecto corriendo en **localhost** por si la demo remota falla:
+```bash
+npm run dev
+# http://localhost:3000 funciona sin internet
+```
+
+---
+
+<a id="fase-3"></a>
+## 💼 FASE 3 — El pitch de venta
+
+### 3.1 Propuesta comercial (template)
+
+```markdown
+# Propuesta: Plataforma de Remates Virtuales
+**Preparado para:** [Nombre del cliente]
+**Fecha:** [Fecha]
+**Validez:** 15 días
+
+## El problema
+Los remates tradicionales limitan tu alcance a quienes pueden asistir físicamente.
+Los remates por Facebook/WhatsApp son caóticos, sin trazabilidad y vulnerables a disputas.
+
+## La solución
+Una plataforma profesional de remates virtuales, con:
+✅ Subastas en tiempo real con cronómetro atómico
+✅ Prórrogas automáticas (como Sotheby's)
+✅ Reglas de negocio blindadas (imposible hacer trampa)
+✅ 100% mobile-first (los chacareros usan desde el celular)
+✅ Historial auditable de todas las pujas
+✅ Integración con WhatsApp y Mercado Pago
+✅ Panel de administración para cargar lotes en 30 segundos
+
+## Comparativa de mercado
+
+| Característica | Facebook/WhatsApp | Plataforma custom | Ritchie Bros (US$ 6B) | **Nuestra solución** |
+|---|---|---|---|---|
+| Tiempo real | ❌ | ⚠️ | ✅ | ✅ |
+| Prórroga automática | ❌ | ❌ | ✅ | ✅ |
+| Reglas auditables | ❌ | ❌ | ✅ | ✅ |
+| Mobile-first | ⚠️ | ⚠️ | ⚠️ | ✅ |
+| Costo mensual | US$ 0 | US$ 500+ | US$ 5.000+ | **US$ 50-150** |
+| Time-to-launch | Inmediato | 6+ meses | N/A | **2 semanas** |
+
+## Inversión
+
+### Opción A: Venta única
+- Desarrollo e instalación: **US$ 2.500** (pago único)
+- Incluye: diseño, reglas de negocio, admin, deploy
+- Cliente es dueño del código
+- Hosting: ~US$ 25/mes a cargo del cliente
+
+### Opción B: SaaS (recomendada)
+- Setup inicial: **US$ 800**
+- Fee mensual: **US$ 150/mes** (incluye hosting, mantenimiento, backups)
+- Commitment mínimo: 12 meses
+- Cancelación: 30 días de aviso
+
+### Opción C: Revenue share
+- Setup inicial: **US$ 0**
+- Comisión: **2% de cada venta** (capped en US$ 200/lote)
+- Ideal para clientes con alto volumen
+
+## Extras opcionales (upsell)
+- 📧 Notificaciones email/WhatsApp: +US$ 300
+- 📱 PWA instalable: +US$ 200
+- 📊 Panel analytics avanzado: +US$ 400
+- 💳 Integración Mercado Pago real: +US$ 500
+- 🖨️ Catálogo PDF imprimible: +US$ 150
+
+## Próximos pasos
+1. Aceptar propuesta → firma de contrato
+2. Reunión de branding (colores, logo, nombre del remate)
+3. 2 semanas de desarrollo + testing
+4. Capacitación (2 horas por Zoom)
+5. Lanzamiento
+```
+
+### 3.2 Argumentos clave para cerrar
+
+| Objeción del cliente | Respuesta |
+|---|---|
+| "Es muy caro" | "Un remate de US$ 50.000 te paga el sistema entero. Y con SaaS son US$ 150/mes, menos que un empleado medio día." |
+| "Ya uso Facebook" | "¿Cuántas disputas tuviste por 'yo había ofertado antes'? Con esto tenés auditoría completa. Un solo reclamo resuelto te paga el año." |
+| "No confío en la tecnología" | "Te doy 3 meses de prueba con garantía de devolución. Si no te sirve, te devuelvo todo." |
+| "¿Y si se cae en pleno remate?" | "Vercel tiene 99.99% de uptime. Si se cae, perdés 4 minutos al año. Y tenés soporte 24/7." |
+| "¿Quién mantiene esto?" | "Yo. Por US$ 150/mes tenés actualizaciones, backups, monitoreo y soporte por WhatsApp." |
+
+### 3.3 Casos de éxito (inventados pero realistas)
+
+Tené listos 2-3 "case studies" (aunque sean de la demo):
+
+> **Remate Agrícola del Sur (demo)**
+> "En su primer remate virtual vendieron 23 lotes por US$ 185.000, con 47 pujadores de 4 departamentos distintos. El lote más disputado tuvo 14 pujas en 10 minutos y se vendió 30% sobre el precio base."
+
+---
+
+<a id="fase-4"></a>
+## 🎨 FASE 4 — Personalización multi-cliente
+
+Cuando vendés el proyecto a varios clientes, necesitás **customizar rápido**. Acá está el sistema.
+
+### 4.1 Sistema de tenants (uno por cliente)
+
+Creá `lib/branding.ts`:
+
+```typescript
+export const BRANDS = {
+  // Cliente 1: Remates del Sur
+  'remates-del-sur': {
+    name: 'Remates Agrícolas del Sur',
+    shortName: 'RematesSur',
+    phone: '099123456',
+    whatsapp: '59899123456',
+    email: 'contacto@rematessur.com.uy',
+    colors: {
+      forest: '#2d5016',
+      forestDark: '#1e3a0f',
+      wheat: '#e8b86d',
+      earth: '#3a2f1f',
+      cream: '#faf7f0',
+    },
+    logo: '/brands/remates-sur/logo.svg',
+    favicon: '/brands/remates-sur/favicon.ico',
+    domain: 'remates-del-sur.app',
+  },
+
+  // Cliente 2: Agro Subastas
+  'agro-subastas': {
+    name: 'Agro Subastas Uruguay',
+    shortName: 'AgroSub',
+    phone: '098765432',
+    whatsapp: '59898765432',
+    email: 'info@agrosub.com.uy',
+    colors: {
+      forest: '#1e40af',  // Azul en vez de verde
+      forestDark: '#1e3a8a',
+      wheat: '#fbbf24',
+      earth: '#1f2937',
+      cream: '#f9fafb',
+    },
+    logo: '/brands/agro-subastas/logo.svg',
+    favicon: '/brands/agro-subastas/favicon.ico',
+    domain: 'agrosubastas.app',
+  },
+
+  // Demo genérica
+  'demo': {
+    name: 'Remate Virtual Agrícola',
+    shortName: 'RemateAgro',
+    phone: '096125030',
+    whatsapp: '59896125030',
+    email: 'demo@remate-agro.app',
+    colors: {
+      forest: '#2d5016',
+      forestDark: '#1e3a0f',
+      wheat: '#e8b86d',
+      earth: '#3a2f1f',
+      cream: '#faf7f0',
+    },
+    logo: '/brands/demo/logo.svg',
+    favicon: '/favicon.ico',
+    domain: 'demo.remate-agro.app',
+  },
+} as const
+
+export type BrandKey = keyof typeof BRANDS
+
+// Detectar brand según dominio o variable de entorno
+export function getBrand(): typeof BRANDS[BrandKey] {
+  // 1. Override por env (para demos)
+  const envBrand = process.env.NEXT_PUBLIC_BRAND as BrandKey | undefined
+  if (envBrand && BRANDS[envBrand]) return BRANDS[envBrand]
+
+  // 2. Detección por hostname (server-side)
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname
+    for (const [key, brand] of Object.entries(BRANDS)) {
+      if (host.includes(brand.domain)) return brand
+    }
+  }
+
+  return BRANDS.demo
+}
+```
+
+### 4.2 Inyectar colores dinámicamente
+
+Modificá `app/layout.tsx`:
+
+```tsx
+import { getBrand } from '@/lib/branding'
+
+export async function generateMetadata() {
+  const brand = getBrand()
+  return {
+    title: `${brand.name} — Remates Virtuales`,
+    description: `Subastas en vivo de maquinaria agrícola. ${brand.name}`,
+    icons: { icon: brand.favicon },
+  }
+}
+
+export default function RootLayout({ children }) {
+  const brand = getBrand()
+
+  return (
+    <html lang="es" style={{
+      // @ts-ignore - CSS custom properties
+      '--color-forest': brand.colors.forest,
+      '--color-forest-dark': brand.colors.forestDark,
+      '--color-wheat': brand.colors.wheat,
+      '--color-earth': brand.colors.earth,
+      '--color-cream': brand.colors.cream,
+    }}>
+      <body className="font-sans antialiased bg-cream text-earth">
+        <BrandProvider brand={brand}>
+          {children}
+        </BrandProvider>
+      </body>
+    </html>
+  )
+}
+```
+
+### 4.3 Carpeta de assets por cliente
+
+```
+public/brands/
+├── demo/
+│   ├── logo.svg
+│   └── favicon.ico
+├── remates-del-sur/
+│   ├── logo.svg
+│   ├── favicon.ico
+│   ├── og-image.jpg  (para compartir en redes)
+│   └── pdf-header.png
+└── agro-subastas/
+    ├── logo.svg
+    ├── favicon.ico
+    ├── og-image.jpg
+    └── pdf-header.png
+```
+
+### 4.4 Deploy multi-cliente desde UN repo
+
+**Estrategia:** un solo repo, múltiples proyectos en Vercel, uno por cliente.
+
+```bash
+# Para cada cliente nuevo:
+vercel link  # elegís el proyecto correspondiente
+vercel env add NEXT_PUBLIC_BRAND  # seteás "remates-del-sur"
+vercel --prod
+```
+
+En Vercel:
+1. Creás un proyecto nuevo por cliente
+2. Apuntás al mismo repo de GitHub
+3. Seteás `NEXT_PUBLIC_BRAND` distinto en cada uno
+4. Conectás dominios distintos
+
+**Resultado:** un código, N clientes, N deploys independientes.
+
+---
+
+<a id="fase-5"></a>
+## 📦 FASE 5 — Handoff al cliente
+
+Cuando se concreta la venta, tenés que transferir todo de forma profesional.
+
+### 5.1 Checklist de handoff (imprimible)
+
+```markdown
+# 📋 Handoff [Cliente] - [Fecha]
+
+## ✅ Pre-entrega
+- [ ] Todos los tests pasan (`npm test`)
+- [ ] Deploy a producción funcionando
+- [ ] Seed data borrada (solo lotes reales del cliente)
+- [ ] Admin credentials cambiados (no usar "demo/demo2026")
+- [ ] Variables de entorno de producción seteadas
+- [ ] Backups automáticos configurados en Supabase
+
+## ✅ Cuentas a transferir
+- [ ] Proyecto Vercel → cuenta del cliente (o crearle una)
+- [ ] Proyecto Supabase → cuenta del cliente
+- [ ] Dominio → registrado a nombre del cliente
+- [ ] Resend → cuenta verificada con su dominio
+- [ ] Twilio → cuenta con su número de WhatsApp
+- [ ] Mercado Pago → credenciales de SU cuenta
+- [ ] Google Analytics (si aplica)
+
+## ✅ Documentación entregada
+- [ ] Manual de usuario (PDF, 10-15 páginas)
+- [ ] Video tutorial de 15 min (cómo cargar lotes, cerrar remate)
+- [ ] Acceso a Notion/Confluence con docs técnicas
+- [ ] Contrato de mantenimiento firmado
+
+## ✅ Capacitación
+- [ ] Sesión 1: Admin y carga de lotes (2 hs)
+- [ ] Sesión 2: Cierre de remate y gestión de ganadores (1 hs)
+- [ ] Grabación de ambas sesiones entregadas
+
+## ✅ Soporte post-venta
+- [ ] Grupo de WhatsApp creado (soporte 30 días gratis)
+- [ ] SLA definido (respuesta en X horas)
+- [ ] Próxima revisión agendada (30 días)
+```
+
+### 5.2 Transferencia de Vercel
+
+**Opción A — Cliente tiene cuenta Vercel:**
+1. En tu Vercel: Project → Settings → General → Transfer Project
+2. Ingresá el email del cliente
+3. Cliente acepta la invitación
+4. Proyecto aparece en su dashboard
+
+**Opción B — Vos mantenés el hosting (SaaS):**
+1. Invitás al cliente como **Viewer** (solo ve analytics, no puede romper nada)
+2. Vos sos el Owner
+3. Cobrás el fee mensual
+
+### 5.3 Transferencia de Supabase
+
+**Opción A — Cliente tiene cuenta:**
+1. En tu Supabase: Project Settings → General → Transfer Project
+2. Cliente acepta → paga su propio plan
+
+**Opción B — Mantenés vos (recomendado para SaaS):**
+1. Cliente no ve Supabase
+2. Vos cobrás el fee que incluye hosting
+
+### 5.4 Configuración de dominio del cliente
+
+Cuando el cliente **sí** tenga su dominio (ej: `remates-juan.com.uy`):
+
+```bash
+# 1. Cliente compra dominio (ej: en Antel, NIC Uruguay, Namecheap)
+# 2. En Vercel: Settings → Domains → Add "remates-juan.com.uy"
+# 3. Vercel te da los DNS records (tipo A y CNAME)
+# 4. Cliente configura en su registrador:
+#
+#    Type  Name  Value
+#    A     @     76.76.21.21
+#    CNAME www     cname.vercel-dns.com
+#
+# 5. Esperar propagación (5 min a 48 hs)
+# 6. SSL automático (Vercel lo genera solo)
+```
+
+### 5.5 Manual de usuario (template)
+
+Generá un PDF de 10 páginas con:
+
+```markdown
+# Manual de Usuario - [Nombre del cliente]
+
+## 1. Ingresar al panel admin
+- URL: https://tudominio.com/admin
+- Usuario: [el que le diste]
+- Contraseña: [la que le diste]
+- ⚠️ Cambiar la contraseña la primera vez
+
+## 2. Cargar un lote nuevo (3 minutos)
+1. Click en "+ Nuevo lote"
+2. Completar: título, descripción, precio base
+3. Elegir álbum (1, 2, 3 o 4)
+4. Subir fotos (recomendado: 4-6 fotos, buena luz)
+5. Definir fecha/hora de cierre
+6. Guardar
+
+## 3. Durante el remate
+- El sistema corre solo
+- Podés monitorear en /admin/dashboard
+- Si necesitás cancelar un lote: botón "Reiniciar"
+
+## 4. Después del remate
+- Ir a /ganadores para ver la lista
+- Contactar a cada ganador por WhatsApp
+- Coordinar pago y retiro (24 hs para contactar, 7 días para retirar)
+
+## 5. Soporte
+- WhatsApp: [tu número]
+- Horario: Lunes a Viernes 9-18hs
+- Tiempo de respuesta: < 4 horas hábiles
+```
+
+---
+
+<a id="fase-6"></a>
+## 💰 FASE 6 — Modelo de pricing
+
+### 6.1 Las 3 modalidades que ofrecés
+
+| Modalidad | Setup | Mensual | Para quién | Tu ingreso anual |
+|---|---|---|---|---|
+| **A. Venta única** | US$ 2.500 | US$ 50 (hosting) | Cliente técnico, quiere ser dueño | US$ 3.100 |
+| **B. SaaS** ⭐ | US$ 800 | US$ 150 | Cliente no técnico, sin sorpresas | US$ 2.600/año recurrente |
+| **C. Revenue share** | US$ 0 | 2% de ventas | Cliente grande, alto volumen | US$ 3.000+ si vende bien |
+
+> ⭐ **Recomendación:** Vendé **SaaS**. Es el modelo que más vale tu empresa a largo plazo.
+
+### 6.2 Costs operativos REALES por cliente (SaaS)
+
+| Concepto | Plan | Costo mensual |
+|---|---|---|
+| Vercel Pro | US$ 20/mes (compartido entre todos tus clientes) | US$ 1.6 por cliente (si tenés 12) |
+| Supabase Pro | US$ 25/mes por proyecto | US$ 25 |
+| Dominio `.app` | US$ 15/año | US$ 1.25 |
+| Resend (emails) | Free (3.000/mes) | US$ 0 |
+| Twilio WhatsApp | US$ 0.005/mensaje | US$ 5-20 (según uso) |
+| Tu tiempo mantenimiento | ~2 hs/mes | Tu costo |
+| **TOTAL** | | **~US$ 35-50/mes** |
+
+**Margen bruto:** US$ 150 - US$ 50 = **US$ 100/cliente/mes** (67%)
+
+### 6.3 Escalabilidad del modelo SaaS
+
+| Clientes | Ingreso bruto | Costos | Ganancia |
+|---|---|---|---|
+| 1 | US$ 150 | US$ 50 | US$ 100 |
+| 5 | US$ 750 | US$ 200 | US$ 550 |
+| 10 | US$ 1.500 | US$ 400 | US$ 1.100 |
+| 20 | US$ 3.000 | US$ 800 | US$ 2.200 |
+| 50 | US$ 7.500 | US$ 2.000 | US$ 5.500 |
+
+> Con **20 clientes** tenés un ingreso pasivo de US$ 2.200/mes.
+> Con **50 clientes** necesitás contratar soporte, pero ganás US$ 5.500/mes.
+
+### 6.4 Upsells (lo que vendés después)
+
+Una vez que el cliente está usando la plataforma, le vendés mejoras:
+
+| Upsell | Precio único | Precio mensual | Cuándo ofrecerlo |
+|---|---|---|---|
+| Notificaciones WhatsApp | US$ 300 | +US$ 20 | Al 2° remate |
+| PWA instalable | US$ 200 | incluido | Al 3° remate |
+| Analytics avanzado | US$ 400 | +US$ 30 | Cuando quiera métricas |
+| Integración Mercado Pago real | US$ 500 | +US$ 25 | Cuando confíe en el sistema |
+| App mobile nativa | US$ 3.000 | +US$ 100 | Si tiene mucho volumen |
+| Multi-sucursal | US$ 1.500 | +US$ 50 | Si abre otra sucursal |
+| White-label (su propia marca) | US$ 800 | +US$ 40 | Si quiere revender |
+
+### 6.5 Contrato tipo (cláusulas clave)
+
+```markdown
+# CONTRATO DE SERVICIO SAAS
+
+## Partes
+- **Proveedor:** [Tu nombre/empresa], CUIT/RUT [xxx]
+- **Cliente:** [Nombre], RUT [xxx]
+
+## Objeto
+Plataforma web de remates virtuales, modalidad SaaS.
+
+## Precio
+- Setup: US$ 800 (pago único, al firmar)
+- Fee mensual: US$ 150 + IVA, facturado por adelantado
+
+## Duración
+- Mínima: 12 meses
+- Renovación: automática por períodos iguales
+- Rescisión: 30 días de aviso por escrito
+
+## Incluye
+- Hosting (Vercel + Supabase)
+- Backups diarios
+- Soporte por WhatsApp (L-V 9-18hs)
+- Actualizaciones de seguridad
+- Hasta 10.000 visitas/mes (excedente: US$ 10 cada 1.000)
+- Hasta 4 remates/mes (excedente: US$ 50 c/u)
+
+## No incluye
+- Dominio (a cargo del cliente)
+- Comisiones de Mercado Pago
+- Costos de WhatsApp (Twilio) por encima de 500 mensajes/mes
+- Cambios de diseño (cotizados aparte)
+- Desarrollo de features nuevas (cotizadas aparte)
+
+## SLA (Service Level Agreement)
+- Uptime: 99.5% mensual
+- Respuesta a incidencias: < 4 hs hábiles
+- Resolución de bugs críticos: < 24 hs
+- Créditos por downtime: 5% del fee por cada 1% debajo del SLA
+
+## Propiedad intelectual
+- El código es propiedad del proveedor
+- El cliente tiene licencia de uso mientras dure el contrato
+- Los datos (lotes, pujas, clientes) son del cliente
+- Al rescindir, el cliente recibe export de datos en SQL/CSV
+
+## Confidencialidad
+- Ambas partes mantienen confidencialidad de datos
+- Proveedor no divulgará información comercial del cliente
+
+## Limitación de responsabilidad
+- Máximo: 3 meses de fee
+- No cubre lucro cesante ni daños indirectos
+
+## Ley aplicable
+- República Oriental del Uruguay
+- Tribunales de Montevideo
+```
+
+---
+
+<a id="fase-7"></a>
+## 🛟 FASE 7 — Soporte post-venta
+
+### 7.1 Sistema de tickets simple (gratis)
+
+No necesitás Zendesk. Usá:
+
+**Opción A: Notion + formulario (la más rápida)**
+1. Creás un Notion database "Tickets"
+2. Formulario con Tally.so (gratis) que escribe en Notion
+3. Cliente carga ticket → vos respondés en Notion → le llega email
+
+**Opción B: GitHub Issues (si el cliente es técnico)**
+1. Repo privado con el cliente como collaborator
+2. "New issue" = ticket
+3. Labels: `bug`, `feature`, `question`, `urgent`
+
+**Opción C: WhatsApp Business (la más usada en Latam)**
+1. Grupo de WhatsApp con el cliente
+2. Etiquetas de WhatsApp Business: "pendiente", "en progreso", "resuelto"
+3. Una vez por semana, pasás los "resueltos" a un Excel
+
+### 7.2 Monitoreo (sin pagar)
+
+| Qué monitorear | Herramienta gratis |
+|---|---|
+| Uptime | UptimeRobot (50 checks gratis) |
+| Errores de frontend | Sentry free (5.000 eventos/mes) |
+| Performance | Vercel Analytics (incluido en Pro) |
+| Queries lentas | Supabase Dashboard → Database → Queries |
+| Logs | Vercel Logs (últimas 100.000 líneas) |
+
+### 7.3 Backups automáticos
+
+**Supabase (plan Pro, US$ 25/mes):**
+- Backups diarios automáticos
+- PITR (Point-In-Time Recovery) de 7 días
+- Retención: 30 días
+
+**Si querés backups extra (recomendado):**
+```bash
+# Script diario en tu server (o GitHub Actions)
+pg_dump $DATABASE_URL | gzip > backup-$(date +%Y%m%d).sql.gz
+# Subir a S3/Google Drive/Dropbox
+```
+
+### 7.4 Calendario de mantenimiento
+
+Cada cliente, cada mes:
+
+| Día | Tarea | Tiempo |
+|---|---|---|
+| 1 | Revisar logs de errores | 15 min |
+| 7 | Test de backup (restaurar en staging) | 30 min |
+| 14 | Actualizar dependencias (`npm audit`) | 30 min |
+| 21 | Reunión de seguimiento con cliente | 30 min |
+| 28 | Reporte mensual (analytics, uptime, issues) | 30 min |
+
+**Total: ~3 horas/mes por cliente.**
+
+---
+
+<a id="bonus"></a>
+## 🎁 BONUS — Plantillas y scripts
+
+### B.1 Email de propuesta (template)
+
+```
+Asunto: Propuesta: plataforma de remates virtuales para [Cliente]
+
+Hola [Nombre],
+
+Como conversamos, te paso la propuesta para desarrollar tu plataforma
+de remates virtuales.
+
+📎 Adjunto:
+- Propuesta detallada (PDF)
+- Demo en vivo: https://demo.remate-agro.app
+- Video explicativo (3 min): https://loom.com/share/xxxx
+
+En resumen:
+✅ Setup: US$ 800 (pago único)
+✅ Fee mensual: US$ 150 (incluye hosting + soporte)
+✅ Time-to-launch: 2 semanas desde la firma
+
+La demo que te mando ya tiene 20 lotes cargados con datos reales
+para que veas cómo se ve en acción. Probá hacer una puja desde
+el celular — esa es la experiencia que van a tener tus clientes.
+
+¿Te parece si agendamos 30 min esta semana para resolver dudas
+y, si estás de acuerdo, firmar y arrancar?
+
+Abrazo,
+[Tu nombre]
+[Tu WhatsApp]
+```
+
+### B.2 Script para clonar proyecto para nuevo cliente
+
+```bash
+#!/bin/bash
+# scripts/new-client.sh
+# Uso: ./new-client.sh agro-subastas "Agro Subastas"
+
+set -e
+SLUG=$1
+NAME=$2
+
+if [ -z "$SLUG" ] || [ -z "$NAME" ]; then
+  echo "Uso: $0 <slug> <nombre>"
+  echo "Ej: $0 agro-subastas 'Agro Subastas Uruguay'"
+  exit 1
+fi
+
+echo "🎨 Creando configuración para: $NAME ($SLUG)"
+
+# 1. Crear carpeta de brand
+mkdir -p "public/brands/$SLUG"
+cp public/brands/demo/logo.svg "public/brands/$SLUG/logo.svg"
+cp public/brands/demo/favicon.ico "public/brands/$SLUG/favicon.ico"
+
+# 2. Agregar al archivo lib/branding.ts (manual)
+echo ""
+echo "📝 Agregá este bloque a lib/branding.ts:"
+cat << EOF
+
+  '$SLUG': {
+    name: '$NAME',
+    shortName: '$NAME',
+    phone: '[COMPLETAR]',
+    whatsapp: '[COMPLETAR]',
+    email: '[COMPLETAR]',
+    colors: {
+      forest: '#2d5016',
+      forestDark: '#1e3a0f',
+      wheat: '#e8b86d',
+      earth: '#3a2f1f',
+      cream: '#faf7f0',
+    },
+    logo: '/brands/$SLUG/logo.svg',
+    favicon: '/brands/$SLUG/favicon.ico',
+    domain: '$SLUG.remate-agro.app',
+  },
+EOF
+
+# 3. Crear rama de git
+git checkout -b "cliente-$SLUG"
+git add -A
+git commit -m "feat: setup cliente $NAME"
+
+echo ""
+echo "✅ Listo. Próximos pasos:"
+echo "   1. Customizar colores y logo en public/brands/$SLUG/"
+echo "   2. Completar datos en lib/branding.ts"
+echo "   3. Crear proyecto nuevo en Vercel"
+echo "   4. Setear NEXT_PUBLIC_BRAND=$SLUG"
+echo "   5. Deploy: vercel --prod"
+```
+
+### B.3 Generador de PDF de propuesta
+
+Usá el mismo `@react-pdf/renderer` que ya tenés para generar propuestas profesionales:
+
+```tsx
+// lib/proposals/generate.tsx
+import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer'
+
+const styles = StyleSheet.create({
+  page: { padding: 40, fontFamily: 'Helvetica' },
+  header: { marginBottom: 30 },
+  title: { fontSize: 28, fontWeight: 'bold', color: '#2d5016' },
+  section: { marginTop: 20 },
+  sectionTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 10 },
+  text: { fontSize: 11, lineHeight: 1.6 },
+})
+
+export function ProposalPDF({ clientName, mode }: { clientName: string, mode: 'saas' | 'venta' | 'revenue' }) {
+  return (
+    <Document>
+      <Page size="A4" style={styles.page}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Propuesta Comercial</Text>
+          <Text>Preparado para: {clientName}</Text>
+          <Text>Fecha: {new Date().toLocaleDateString('es-UY')}</Text>
+        </View>
+        {/* ... más contenido según modo */}
+      </Page>
+    </Document>
+  )
+}
+```
+
+### B.4 Dashboard interno (para vos, el freelancer)
+
+Creá un proyecto separado `admin-freelancer` (tuyo, no del cliente) donde veas:
+
+- Todos tus clientes en un mapa
+- Ingresos mensuales recurrentes (MRR)
+- Churn rate
+- Tickets abiertos
+- Uptime de cada proyecto
+
+Esto te da el control de tu **negocio**, no solo del código.
+
+---
+
+## 🎯 Tu plan de acción en los próximos 30 días
+
+### Semana 1: Preparación
+- [ ] Correr `scripts/demo-setup.sh` y tener la demo andando
+- [ ] Deploy a Vercel con URL pública
+- [ ] Grabar video demo de 5 min (Loom)
+- [ ] Comprar dominio `remate-agro.app` (US$ 15)
+
+### Semana 2: Prospección
+- [ ] Listar 20 posibles clientes (escritorios rurales, ferias, consignatarios)
+- [ ] Mandar 20 emails con la propuesta
+- [ ] Agendar 5 demos
+
+### Semana 3: Demos
+- [ ] Hacer las 5 demos usando el script de la Fase 2
+- [ ] Iterar el pitch según feedback
+- [ ] Mandar propuestas formales
+
+### Semana 4: Cierre
+- [ ] Firmar con el primer cliente (aunque sea con descuento)
+- [ ] Customizar con `scripts/new-client.sh`
+- [ ] Deploy + capacitación
+- [ ] Pedir testimonio
+
+**Meta realista:** cerrar 1 cliente en 30 días, 3 clientes en 90 días, 10 clientes en 6 meses.
+
+A los 6 meses: **US$ 1.500/mes de ingreso recurrente** mientras dormís.
+
+---
+
+## 🚨 Errores comunes al vender este tipo de proyecto
+
+| Error | Cómo evitarlo |
+|---|---|
+| Vender "código" en vez de "solución" | Hablá de remates exitosos, no de React |
+| No cobrar setup | Siempre cobrá algo inicial, filtra clientes no-serios |
+| Dar garantía de por vida | Limitá a 30-90 días, luego maintenance pago |
+| Prometer features que no tenés | Mostrá SOLO lo que está funcionando |
+| No tener contrato | Siempre contrato firmado, aunque sea entre amigos |
+| Dar el código fuente en SaaS | Nunca. El código es tuyo. |
+| No cobrar por cambios | Todo cambio post-entrega = cotización nueva |
+| Soporte 24/7 gratis | Horario limitado, urgencias = extra |
+
+---
+
+## 📊 Tu "business card" para el proyecto
+
+```
+┌─────────────────────────────────────────┐
+│                                         │
+│  🚜 REMATES VIRTUALES AGRO              │
+│                                         │
+│  [Tu nombre]                            │
+│  Desarrollador de Plataformas           │
+│                                         │
+│  📱 WhatsApp: +598 9X XXX XXX           │
+│  📧 Email: tu@email.com                 │
+│  🌐 Demo: demo.remate-agro.app          │
+│                                         │
+│  "Tu remate, en todo el país"           │
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+---
+
+## ✅ Checklist final antes de tu primera reunión
+
+- [ ] Demo deployada y funcionando (`demo.remate-agro.app`)
+- [ ] Video demo grabado (backup si falla internet)
+- [ ] Propuesta en PDF lista (con los 3 modos de pricing)
+- [ ] Contrato template revisado
+- [ ] 2 celulares cargados (para mostrar responsive en vivo)
+- [ ] Hotspot del celular por si falla el WiFi
+- [ ] Script de demo impreso (por si te ponés nervioso)
+- [ ] Casos de éxito memorizados (aunque sean de la demo)
+- [ ] Respuestas a objeciones en la punta de la lengua
+- [ ] Tarjetas personales (sí, todavía sirven)
+
+---

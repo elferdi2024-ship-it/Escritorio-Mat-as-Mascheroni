@@ -1,0 +1,591 @@
+# 🎨 Design System Visual — Lo que faltaba
+
+Tenés razón en preguntar. **Honestamente: no.** Entregué arquitectura, código y lógica de negocio, pero **no desarrollé un design brief visual detallado**. El prompt a Antigravity menciona el skill `ui-ux-pro-max` pero sin una especificación concreta de cómo debe verse cada pantalla.
+
+Te lo resuelvo ahora con un **Design System completo tipo agencia** que podés:
+- Mostrarle al cliente como propuesta visual
+- Agregar al prompt de Antigravity
+- Usar como referencia para diseñar en Figma si querés
+
+---
+
+## 🎭 1. Concepto Visual: "Editorial Rural Premium"
+
+**No es** el típico sitio verde con tractores clip-art.
+**Sí es** una mezcla entre *catálogo de subastas Sotheby's* + *revista Country Living* + *UI de fintech moderna*.
+
+### Referencias visuales (moodboard mental)
+
+| Referencia | Qué tomamos |
+|---|---|
+| **Ritchie Bros** | Densidad de información, cards de maquinaria, seriedad |
+| **Bring a Trailer** | Fotografía hero, tipografía editorial, feeling de "subasta premium" |
+| **Stripe Press** | Minimalismo tipográfico, mucho espacio en blanco, detalles finos |
+| **Country Living Magazine** | Paleta tierra/verde trigo, feeling rural pero elegante |
+| **Linear.app** | Micro-interacciones, glassmorphism sutil, dark accents |
+
+### Personalidad de marca
+- **Confiable** (como un banco rural)
+- **Premium** (como una subasta de arte)
+- **Moderna** (como una fintech)
+- **Cercana** (como el almacén del pueblo)
+
+---
+
+## 🎨 2. Design Tokens (Tailwind v4 CSS-first)
+
+### `app/globals.css`
+
+```css
+@import "tailwindcss";
+
+@theme {
+  /* === PALETA PRINCIPAL (HSL para manipulación) === */
+  --color-forest-50: oklch(0.97 0.015 130);
+  --color-forest-100: oklch(0.92 0.04 130);
+  --color-forest-300: oklch(0.70 0.12 130);
+  --color-forest-500: oklch(0.48 0.14 130);  /* Principal */
+  --color-forest-700: oklch(0.32 0.12 130);
+  --color-forest-900: oklch(0.20 0.08 130);
+
+  --color-wheat-50: oklch(0.98 0.02 80);
+  --color-wheat-200: oklch(0.88 0.08 80);
+  --color-wheat-400: oklch(0.78 0.14 75);   /* Dorado trigo */
+  --color-wheat-600: oklch(0.62 0.14 70);
+
+  --color-earth-50: oklch(0.97 0.01 60);
+  --color-earth-200: oklch(0.85 0.03 60);
+  --color-earth-500: oklch(0.45 0.05 55);
+  --color-earth-800: oklch(0.28 0.04 55);
+  --color-earth-950: oklch(0.15 0.03 55);
+
+  --color-cream: oklch(0.98 0.008 80);
+  --color-cream-warm: oklch(0.96 0.015 80);
+
+  --color-alert: oklch(0.58 0.22 25);
+  --color-success: oklch(0.65 0.18 140);
+
+  /* === TIPOGRAFÍA === */
+  --font-display: 'Outfit', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* === RADII === */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1.25rem;
+  --radius-xl: 1.75rem;
+
+  /* === SOMBRAS (HSL fluidas) === */
+  --shadow-subtle: 0 1px 2px oklch(0.20 0.03 55 / 0.04);
+  --shadow-soft: 0 4px 12px oklch(0.20 0.03 55 / 0.06);
+  --shadow-card: 0 12px 32px oklch(0.20 0.03 55 / 0.08), 0 2px 6px oklch(0.20 0.03 55 / 0.04);
+  --shadow-glow-forest: 0 8px 24px oklch(0.48 0.14 130 / 0.25);
+  --shadow-glow-wheat: 0 8px 24px oklch(0.78 0.14 75 / 0.3);
+
+  /* === ANIMACIONES === */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-slow: 400ms;
+}
+
+@layer base {
+  body {
+    font-family: var(--font-body);
+    background: var(--color-cream);
+    color: var(--color-earth-950);
+    background-image:
+      radial-gradient(ellipse at top, var(--color-wheat-50), transparent 50%),
+      radial-gradient(ellipse at bottom, var(--color-forest-50), transparent 50%);
+    background-attachment: fixed;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+}
+```
+
+### Tipografía jerárquica
+
+| Uso | Fuente | Tamaño | Weight | Tracking |
+|---|---|---|---|---|
+| Hero H1 | Outfit | 72-96px | 700 | -0.04em |
+| Sección H2 | Outfit | 40-56px | 600 | -0.03em |
+| Card title | Outfit | 20-24px | 600 | -0.02em |
+| Body | Inter | 16px | 400 | 0 |
+| Body small | Inter | 14px | 400 | 0 |
+| Label / Overline | Inter | 11-12px | 600 | +0.1em uppercase |
+| Números (precios, countdown) | Outfit tabular | variable | 700 | 0 |
+
+---
+
+## 🖼️ 3. Wireframes textuales de cada pantalla
+
+### 🏠 HOME (`/`)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ NAV BAR (sticky, glass blur en scroll)                      │
+│ [🚜 Logo]     Álbumes · Ganadores · Reglamento    [🔍] [👤] │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│ HERO (altura 90vh, imagen de fondo con overlay gradiente)   │
+│                                                             │
+│  ┌─ Overline pill ───────────────────────────────┐         │
+│  │ 🟢 EN VIVO · Remate #59 · 47 pujadores activos│         │
+│  └────────────────────────────────────────────────┘         │
+│                                                             │
+│  Gran Remate Virtual                                        │
+│  Agrícola #59                                               │
+│  [trigo dorado en "Agrícola #59"]                          │
+│                                                             │
+│  20 lotes · Martes 19 de Mayo, 20:00 hrs                    │
+│                                                             │
+│  [Ver lotes disponibles →]  [📜 Reglamento]                 │
+│                                                             │
+│  ⏱ Countdown hero gigante (3 bloques: días/hrs/min/seg)    │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│ LIVE TICKER (franja oscura, texto en movimiento)            │
+│ 🟢 EN VIVO: Lote #4 Pulverizador Jacto — US$ 38.600        │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│ STATS BAR (3 métricas en fila)                              │
+│ ┌──────────┐  ┌──────────┐  ┌──────────┐                   │
+│ │ 20       │  │ 47       │  │ US$ 185K │                   │
+│ │ Lotes    │  │ Pujadores│  │ en pujas │                   │
+│ └──────────┘  └──────────┘  └──────────┘                   │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│ SECCIÓN ÁLBUMES                                              │
+│                                                             │
+│  Lotes disponibles                            [🔍 Buscar]   │
+│  Seleccioná un álbum y empezá a ofertar                     │
+│                                                             │
+│  [Álbum 1/4 (5)] [Álbum 2/4 (5)] [Álbum 3/4 (5)] [4/4 (5)] │
+│       ↑                                                   │
+│   Tabs con contador de lotes                                │
+│                                                             │
+│  ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐                          │
+│  │ IMG │ │ IMG │ │ IMG │ │ IMG │   ← Grid 4 columnas      │
+│  │     │ │     │ │     │ │     │     (3 en tablet,         │
+│  │#1   │ │#2   │ │#3   │ │#4   │      2 en mobile,         │
+│  │     │ │     │ │     │ │     │      1 en mobile pequeño) │
+│  │Título│ │Título│ │Título│ │Título│                        │
+│  │US$XX│ │US$XX│ │US$XX│ │US$XX│                           │
+│  │⏱ 2h│ │⏱ 2h│ │⏱ 2h│ │⏱ 2h│                             │
+│  └─────┘ └─────┘ └─────┘ └─────┘                          │
+│                                                             │
+│  [Descargar catálogo PDF 🖨️]                                │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│ CÓMO FUNCIONA (3 pasos con íconos grandes)                  │
+│                                                             │
+│     [1]                [2]                [3]               │
+│   📸 Elegí         🔨 Pujá          🏆 Ganá               │
+│   un lote          en vivo          el remate              │
+│                                                             │
+│   Explorá los      Hacé tu oferta   Si sos el mejor        │
+│   4 álbumes...     y segui...       postor, coordinás      │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│ CTA FINAL (fondo forest oscuro)                              │
+│ ¿Tenés herramientas para vender?                            │
+│ [Contactanos para tu próximo remate →]                      │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│ FOOTER                                                       │
+│ [Logo] · Consultas: 096 125 030                             │
+│ Links: Reglamento · Ganadores · Admin                       │
+│ © 2026 · Hecho con 🌾 en Uruguay                            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 🔍 DETALLE DE LOTE (`/lote/[id]`)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ NAV + Breadcrumb: Home › Álbum 1 › Lote #4                  │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│ GRID 2 COLUMNAS (desktop) / 1 columna apilada (mobile)          │
+│                                                                 │
+│ IZQUIERDA (60%)            │  DERECHA (40% - STICKY)            │
+│                            │                                    │
+│ ┌──────────────────────┐   │  ┌────────────────────────────┐   │
+│ │                      │   │  │ ⏱ COUNTDOWN HERO           │   │
+│ │                      │   │  │                            │   │
+│ │   IMAGEN PRINCIPAL   │   │  │  [días]  [hrs]  [min]  [s] │   │
+│ │   (aspect 4:3)       │   │  │    00     02    34    12   │   │
+│ │                      │   │  │                            │   │
+│ │   ← 1/5 →            │   │  │ Estado: ⚡ PRÓRROGA        │   │
+│ │   [🔍 Ampliar]       │   │  │ (badge pulsante amarillo)  │   │
+│ │                      │   │  └────────────────────────────┘   │
+│ └──────────────────────┘   │                                    │
+│                            │                                    │
+│ Thumbs: [📷][📷][📷][📷][📷]│  ┌────────────────────────────┐   │
+│                            │  │ 💰 PRECIO ACTUAL             │   │
+│                            │  │                            │   │
+│                            │  │ US$ 38.600                 │   │
+│ ┌──────────────────────┐   │  │ 10 pujas · +US$ 50 mín     │   │
+│ │ 📍 Lote #4 · Álbum 1/4│   │  └────────────────────────────┘   │
+│ │                      │   │                                    │
+│ │ Pulverizador Jacto   │   │  ┌────────────────────────────┐   │
+│ │ Uniport 3000         │   │  │ 🔨 PANEL DE PUJA           │   │
+│ │                      │   │  │                            │   │
+│ │ Descripción completa │   │  │ Tu nombre: [Juan P.     ]  │   │
+│ │ con saltos de línea  │   │  │                            │   │
+│ │                      │   │  │ Tu oferta (US$):           │   │
+│ └──────────────────────┘   │  │ ┌────────────────────┐     │   │
+│                            │  │ │     38.650         │     │   │
+│                            │  │ └────────────────────┘     │   │
+│                            │  │ Incremento mín: US$ 50     │   │
+│                            │  │                            │   │
+│                            │  │ [38.650] [38.750] [38.850] │   │
+│                            │  │     ↑ Quick bids           │   │
+│                            │  │                            │   │
+│                            │  │ [🔨 PUJAR AHORA         ]  │   │
+│                            │  │                            │   │
+│                            │  │ [📸 Pedir fotos WhatsApp]  │   │
+│                            │  └────────────────────────────┘   │
+│                            │                                    │
+│ ┌──────────────────────┐   │                                    │
+│ │ 🏆 HISTORIAL PUJAS   │   │                                    │
+│ │                      │   │                                    │
+│ │ 🥇 Carlos R.  38.600 │   │                                    │
+│ │    Hace 12 min       │   │                                    │
+│ │ ───────────────────  │   │                                    │
+│ │ 🥈 Agro. Sur  38.550 │   │                                    │
+│ │    Hace 4 horas      │   │                                    │
+│ │ ───────────────────  │   │                                    │
+│ │ 🥉 Agro. Sur  38.500 │   │                                    │
+│ │    Hace 3 días       │   │                                    │
+│ │                      │   │                                    │
+│ │ [Ver todas (10)]     │   │                                    │
+│ └──────────────────────┘   │                                    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Estados del countdown (cambian el panel completo):**
+
+| Tiempo restante | Color fondo | Animación | Label |
+|---|---|---|---|
+| > 10 min | Verde forest | ninguna | "Tiempo restante" |
+| 1-10 min | Amarillo trigo | pulse suave 1.5s | "⚠️ Cerrando pronto" |
+| < 1 min | Rojo alerta | pulse rápido 0.8s + scale | "🔥 ÚLTIMO MINUTO" |
+| Prórroga | Verde + borde dorado | shine effect | "⚡ PRÓRROGA +10 min" |
+| Cerrado | Gris oscuro | ninguna | "🏁 LOTE CERRADO" |
+
+---
+
+### 🏆 WINNER BANNER (cuando ganás)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 🎉 (confetti animado de fondo)                              │
+│                                                             │
+│  [🏆] ¡Lote adjudicado!                                     │
+│                                                             │
+│  Ganador: Carlos R. · Puja final: US$ 38.600                │
+│                                                             │
+│  ┌────────────────────┐  ┌────────────────────┐            │
+│  │ 💵 Pago contado    │  │ 💳 Mercado Pago    │            │
+│  │ Comisión 12%       │  │ Comisión 19%       │            │
+│  │                    │  │                    │            │
+│  │ Total: US$ 43.232  │  │ Total: US$ 45.934  │            │
+│  └────────────────────┘  └────────────────────┘            │
+│                                                             │
+│  [📞 Llamar escritorio] [📱 Coordinar por WhatsApp]         │
+│  [💳 Pagar con Mercado Pago]                                │
+│                                                             │
+│  ⏱️ Tenés 24hs para contactar · 7 días para retirar         │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 🔐 ADMIN LOGIN
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│         (fondo con textura sutil de campo)                   │
+│                                                             │
+│              ┌─────────────────────────┐                    │
+│              │                         │                    │
+│              │     🚜 Remates Admin    │                    │
+│              │                         │                    │
+│              │   Panel de gestión      │                    │
+│              │                         │                    │
+│              │   Usuario: [________]   │                    │
+│              │   Clave:   [________]   │                    │
+│              │                         │                    │
+│              │   [ Entrar → ]          │                    │
+│              │                         │                    │
+│              └─────────────────────────┘                    │
+│                                                             │
+│              Card con glass blur y sombra suave             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 📊 ADMIN DASHBOARD
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ [🚜 Admin]  [Dashboard] [Lotes] [+ Nuevo]    [admin] [Salir]│
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│ Dashboard · Remate #59                                       │
+│                                                             │
+│ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐               │
+│ │ 📦20 │ │ 🔨 5 │ │ ⚡ 2 │ │ 🏆 8 │ │ 💰52 │              │
+│ │Total │ │Activ.│ │Prórr.│ │Cerrad│ │Pujas │               │
+│ └──────┘ └──────┘ └──────┘ └──────┘ └──────┘               │
+│                                                             │
+│ ┌─ Acciones rápidas ─────────────────────────────────────┐  │
+│ │ [+ Crear lote] [📋 Ver todos] [📊 Analytics] [↗ Sitio] │  │
+│ └────────────────────────────────────────────────────────┘  │
+│                                                             │
+│ ┌─ Lotes recientes ──────────────────────────────────────┐  │
+│ │ #4 Pulverizador Jacto  | US$ 38.600 | 10 pujas | [···] │  │
+│ │ #1 Tractor JD 6130J    | US$ 48.200 | 5 pujas  | [···] │  │
+│ │ #3 Tractor MF 4275     | US$ 22.050 | 2 pujas  | [···] │  │
+│ └────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🧩 4. Componentes visuales clave (especificación)
+
+### 🎴 Lot Card
+
+```
+┌──────────────────────────┐
+│                          │  ← Imagen 4:3
+│    [🏷️ Lote #4]          │    object-cover, hover scale-110
+│                          │    con transición 500ms
+│            [⏱ 2h 34m]    │  ← Badge countdown (top right)
+│                          │
+├──────────────────────────┤
+│                          │
+│  Pulverizador Jacto      │  ← Título Outfit 18px, 2 líneas
+│  Uniport 3000            │    line-clamp-2
+│                          │
+│  PUJA ACTUAL             │  ← Overline Inter 10px uppercase
+│  US$ 38.600              │  ← Precio Outfit 28px bold
+│                          │
+│  10 pujas                │  ← Stats secondary
+│                          │
+│  [ Ver lote y pujar → ]  │  ← CTA wheat background
+│                          │    hover: wheat-light
+└──────────────────────────┘
+
+Estados:
+- Default: sombra sutil, border cream
+- Hover: translateY(-4px), sombra card, escala imagen 110%
+- Cerrado: grayscale 40%, overlay "🔒 CERRADO"
+- Prórroga: borde dorado animado
+```
+
+### ⏱ Countdown Timer
+
+```
+┌─────────────────────────────────────┐
+│         ⚡ PRÓRROGA ACTIVA          │ ← Solo si extended
+│                                     │
+│          Tiempo restante            │ ← Overline uppercase
+│                                     │
+│    ┌────┐  :  ┌────┐  :  ┌────┐    │ ← Bloques monoespaciados
+│    │ 02 │     │ 34 │     │ 12 │    │   Outfit tabular 48px
+│    │ hrs│     │ min│     │ seg│    │
+│    └────┘     └────┘     └────┘    │
+└─────────────────────────────────────┘
+
+Variantes por estado:
+- safe (verde forest): fondo plano, texto blanco
+- warning (amarillo trigo): pulse 1.5s infinito, texto oscuro
+- critical (rojo): pulse + scale 0.8s, texto blanco
+- extended (verde con borde dorado): shine gradient animado
+```
+
+### 🔔 Toast (notificación)
+
+```
+Glassmorphism: backdrop-blur(12px) + bg white/90 + border sutil
+Sombra: shadow-card
+
+┌──────────────────────────────────────┐
+│  ✅  ¡Puja registrada!               │
+│      Ahora liderás con US$ 38.650    │
+│                                  [×] │
+└──────────────────────────────────────┘
+
+Slide in from bottom, duration 300ms con ease-spring
+Auto-dismiss en 4.5s con progress bar
+```
+
+### 💰 Puja Panel (sticky en desktop)
+
+```
+Card blanca, border-2 forest/20, shadow-card
+Padding generoso (24px)
+
+Jerarquía visual clara:
+1. H3 "Hacé tu puja" (Outfit 22px)
+2. Precio actual (wheat pill con número bold)
+3. Inputs (con labels uppercase pequeños)
+4. Quick bids (3 botones wheat outline)
+5. CTA principal (verde forest, grande, shadow-glow-forest)
+6. WhatsApp secundario (verde WA, outline)
+```
+
+---
+
+## 🎬 5. Micro-interacciones (especificación)
+
+| Acción | Animación |
+|---|---|
+| Hover en card | `translateY(-4px)` + `shadow-card` + `scale(1.02)` en imagen, 300ms `ease-smooth` |
+| Click en "Pujar" | `scale(0.95)` 150ms + `ripple` effect |
+| Puja exitosa | Toast slide-in + sonido agudo + vibración mobile (`navigator.vibrate(100)`) |
+| Ser superado | Toast rojo + sonido grave + shake sutil del panel (200ms) |
+| Prórroga | Banner dorado con `shine` gradient animado 2s + sonido fanfarria corto |
+| Countdown < 1 min | Pulse + color rojo + número de segundos con `tabular-nums` |
+| Contador de pujas | Número hace "flip" vertical (estilo reloj aeropuerto) |
+| Scroll en home | Navbar cambia de transparente a glass blur al pasar 50px |
+| Lightbox abrir | Fade 200ms + scale 0.95→1 con spring |
+| Cambio de tab álbum | Grid hace `stagger` animation (cada card 50ms delay) |
+
+---
+
+## 📱 6. Breakpoints y adaptaciones
+
+| Breakpoint | Ancho | Comportamiento |
+|---|---|---|
+| `xs` | < 480px | Grid 1 col, countdown pequeño, nav hamburguesa |
+| `sm` | ≥ 640px | Grid 2 cols, hero texto más grande |
+| `md` | ≥ 768px | Grid 3 cols, panel puja en columna derecha sticky |
+| `lg` | ≥ 1024px | Grid 4 cols, layout completo |
+| `xl` | ≥ 1280px | Max-width 1440px centrado |
+
+**Mobile-first:** diseñar primero xs, luego escalar.
+
+---
+
+## 🖼️ 7. Assets necesarios (generar/obtener)
+
+### Imágenes hero
+- **Home hero:** Foto de tractor al amanecer (golden hour), campo uruguayo, con overlay gradiente forest-dark desde abajo. Unsplash: `photo-1500382017468-9049fed747ef`
+- **Fallback de lote:** Ilustración SVG minimalista de tractor en tonos wheat/cream (no placeholder gris genérico)
+
+### Íconos
+- Usar **Lucide React** (ya está en deps) con `stroke-width: 1.5`
+- Íconos custom SVG para: tractor, cosechadora, pala, herramientas
+
+### Logo
+- **Marca de texto:** "Remates" (Outfit 700) + "Agrícolas" (Outfit 400 italic)
+- **Isotipo:** Tractor minimalista en línea continua, dorado trigo
+- **Favicon:** Isotipo en fondo forest
+
+---
+
+## 🎯 8. Agregar al prompt de Antigravity
+
+Agregá esta sección al prompt que te armé antes, justo después de `# 🎨 ENTREGABLE ESPERADO`:
+
+```markdown
+# 🎨 ESPECIFICACIÓN VISUAL (DESIGN BRIEF)
+
+Seguí estrictamente este design brief. NO improvises estéticamente.
+
+## Referencia conceptual
+"Editorial Rural Premium" — mezcla de catálogo Sotheby's + revista Country Living + UI fintech moderna.
+Referencias visuales: Ritchie Bros, Bring a Trailer, Stripe Press, Linear.app.
+
+## Design tokens obligatorios
+Usá EXACTAMENTE los tokens del archivo `app/globals.css` especificado en el design brief (paleta forest/wheat/earth/cream en oklch, tipografías Outfit+Inter, radios, sombras HSL, easings).
+
+## Tipografía
+- Display: Outfit (H1, H2, títulos, precios, countdown)
+- Body: Inter (texto general, labels, inputs)
+- Mono: JetBrains Mono (códigos, IDs)
+- Todos los números tabulares (precios, timers) con `font-variant-numeric: tabular-nums`
+
+## Wireframes de referencia
+Ver sección "Wireframes textuales" — respeta la estructura de cada página:
+- Home: Hero 90vh + live ticker + stats bar + álbumes + "cómo funciona" + CTA + footer
+- Detalle lote: Grid 2 columnas (60/40) con panel puja sticky en desktop
+- Admin login: Card centrada con glass blur
+- Admin dashboard: Sidebar + stats grid + tabla
+
+## Micro-interacciones
+- Hover cards: translateY(-4px) + shadow-card + scale(1.02) en imagen, 300ms ease-smooth
+- Botón CTA: scale(0.95) en active, 150ms
+- Toasts: slide-in desde abajo con ease-spring, auto-dismiss 4.5s con progress bar
+- Prórroga: banner dorado con shine gradient 2s
+- Countdown < 1 min: pulse + rojo + tabular-nums
+- Cambio de álbum: stagger animation (50ms delay por card)
+
+## Estados del countdown (CRÍTICO)
+- safe (> 10 min): verde forest plano
+- warning (1-10 min): amarillo trigo con pulse 1.5s
+- critical (< 1 min): rojo con pulse + scale 0.8s
+- extended: verde + borde dorado + shine gradient
+- closed: gris oscuro, sin animación
+
+## PROHIBIDO
+- Placeholders tipo "Lorem ipsum" o "Sample image"
+- Imágenes grises genéricas
+- Tipografía system-ui por defecto
+- Sombras negras (usar HSL earth-950/alpha)
+- Bordes hard (usar siempre radius-md o mayor)
+- Animaciones de más de 500ms (excepto shines loops)
+
+## Assets
+- Hero home: foto de campo uruguayo golden hour con overlay gradiente
+- Lotes: fotos reales de maquinaria (Unsplash válido)
+- Logo: texto "Remates Agrícolas" en Outfit + isotipo tractor SVG
+- Favicon: isotipo en fondo forest
+
+Cada componente debe tener ESTADOS visuales definidos: default, hover, active, focus, disabled, loading, error, success.
+```
+
+---
+
+## 📋 Checklist visual para QA
+
+Cuando Antigravity te entregue, verificá:
+
+- [ ] Paleta coherente (forest/wheat/earth/cream, sin colores sueltos)
+- [ ] Outfit en títulos, Inter en body
+- [ ] Sombras HSL, nunca negras
+- [ ] Hover states en todos los elementos clickables
+- [ ] Countdown cambia de color según tiempo restante
+- [ ] Toasts con glassmorphism y auto-dismiss
+- [ ] Cards con hover translateY
+- [ ] Mobile responsive probado en 375px
+- [ ] Skeletons en lugar de spinners genéricos
+- [ ] Sin placeholders "Lorem ipsum" en ningún lado
+- [ ] Un solo `<h1>` por página
+- [ ] Números tabulares alineados
+- [ ] Focus states visibles (a11y)
+
+---
+

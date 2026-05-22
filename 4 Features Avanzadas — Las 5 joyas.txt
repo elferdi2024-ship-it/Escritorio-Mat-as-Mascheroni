@@ -1,0 +1,1318 @@
+# 🚀 Features Avanzadas — Las 5 joyas
+
+Te entrego las 5 features listas para copiar/pegar. Cada una es independiente: podés activar las que quieras.
+
+---
+
+## 📧 1. Notificaciones (Resend + Twilio WhatsApp)
+
+### `supabase/migrations/notifications.sql`
+
+```sql
+-- Cola de notificaciones
+create table notification_queue (
+  id bigserial primary key,
+  bidder_session_id text not null,
+  lot_id bigint not null references lots(id),
+  channel text not null check (channel in ('email','whatsapp')),
+  recipient text not null,
+  subject text,
+  body text not null,
+  status text default 'pending' check (status in ('pending','sent','failed')),
+  attempts int default 0,
+  error text,
+  created_at timestamptz default now(),
+  sent_at timestamptz
+);
+
+create index idx_queue_pending on notification_queue(status, created_at)
+  where status = 'pending';
+
+-- Contactos del bidder (email/whatsapp)
+alter table bidders add column if not exists email text;
+alter table bidders add column if not exists whatsapp text;
+alter table bidders add column if not exists notify_on_outbid boolean default true;
+
+-- Trigger: cuando alguien supera tu puja, encolar notificación
+create or replace function enqueue_outbid_notification()
+returns trigger as $$
+declare
+  prev_bid record;
+  new_leader record;
+begin
+  -- Buscar la puja inmediatamente anterior (del nuevo líder)
+  select * into new_leader from bids
+    where lot_id = NEW.lot_id and id <> NEW.id
+    order by amount desc, created_at desc limit 1;
+
+  if new_leader is null then return NEW; end if;
+
+  -- Buscar datos del bidder que fue superado
+  insert into notification_queue (bidder_session_id, lot_id, channel, recipient, subject, body)
+  select
+    b.session_id,
+    NEW.lot_id,
+    'email',
+    bd.email,
+    '⚠️ Te superaron en el lote ' || l.title,
+    'Hola ' || bd.name || ', tu puja de US$ ' || new_leader.amount ||
+    ' en el lote "' || l.title || '" fue superada. Nueva puja: US$ ' || NEW.amount ||
+    '. Entrá a pujar de nuevo antes del cierre.'
+  from bids b
+  join bidders bd on bd.session_id = b.bidder_session_id
+  join lots l on l.id = NEW.lot_id
+  where b.id = new_leader.id
+    and bd.email is not null
+    and bd.notify_on_outbid = true
+    and bd.session_id <> NEW.bidder_session_id;  -- no notificarte a vos mismo
+
+  -- Lo mismo para WhatsApp
+  insert into notification_queue (bidder_session_id, lot_id, channel, recipient, subject, body)
+  select
+    b.session_id,
+    NEW.lot_id,
+    'whatsapp',
+    bd.whatsapp,
+    null,
+    '🚜 *Remate #59*%0A%0ATe superaron en el lote *' || l.title || '*%0A' ||
+    'Tu puja: US$ ' || new_leader.amount || '%0A' ||
+    'Nueva puja: *US$ ' || NEW.amount || '*%0A%0A' ||
+    'Pujá de nuevo: ' || coalesce(current_setting('app.site_url', true), 'https://remates-agricolas.com.uy') || '/lote/' || l.id
+  from bids b
+  join bidders bd on bd.session_id = b.bidder_session_id
+  join lots l on l.id = NEW.lot_id
+  where b.id = new_leader.id
+    and bd.whatsapp is not null
+    and bd.notify_on_outbid = true
+    and bd.session_id <> NEW.bidder_session_id;
+
+  return NEW;
+end;
+$$ language plpgsql;
+
+drop trigger if exists trg_enqueue_outbid on bids;
+create trigger trg_enqueue_outbid
+  after insert on bids
+  for each row execute function enqueue_outbid_notification();
+```
+
+### `lib/notifications/resend.ts`
+
+```typescript
+import { Resend } from 'resend'
+
+const resend = new Resend(process.env.RESEND_API_KEY)
+
+export async function sendEmail(to: string, subject: string, body: string) {
+  if (!process.env.RESEND_API_KEY) {
+    console.log('[DEV] Email no enviado:', { to, subject, body })
+    return { ok: true, dev: true }
+  }
+
+  const res = await resend.emails.send({
+    from: 'Remates Agrícolas <no-reply@remates-agricolas.com.uy>',
+    to,
+    subject,
+    text: body,
+  })
+
+  if (res.error) return { ok: false, error: res.error.message }
+  return { ok: true, id: res.data?.id }
+}
+```
+
+### `lib/notifications/twilio.ts`
+
+```typescript
+import twilio from 'twilio'
+
+const client = process.env.TWILIO_ACCOUNT_SID
+  ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
+  : null
+
+export async function sendWhatsApp(to: string, body: string) {
+  // Normalizar número: quitar + y espacios, agregar prefijo whatsapp:
+  const phone = `whatsapp:+${to.replace(/\D/g, '')}`
+
+  if (!client) {
+    console.log('[DEV] WhatsApp no enviado:', { to, body })
+    return { ok: true, dev: true }
+  }
+
+  try {
+    const msg = await client.messages.create({
+      from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
+      to: phone,
+      body: body.replace(/%0A/g, '\n').replace(/\*/g, ''),
+    })
+    return { ok: true, sid: msg.sid }
+  } catch (err: any) {
+    return { ok: false, error: err.message }
+  }
+}
+```
+
+### `app/api/cron/send-notifications/route.ts`
+
+```typescript
+import { NextRequest, NextResponse } from 'next/server'
+import { createServerSupabase } from '@/lib/supabase/server'
+import { sendEmail } from '@/lib/notifications/resend'
+import { sendWhatsApp } from '@/lib/notifications/twilio'
+
+export const dynamic = 'force-dynamic'
+export const maxDuration = 30
+
+export async function GET(req: NextRequest) {
+  const auth = req.headers.get('authorization')
+  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const supabase = await createServerSupabase()
+  const { data: pending } = await supabase
+    .from('notification_queue')
+    .select('*')
+    .eq('status', 'pending')
+    .lt('attempts', 3)
+    .order('created_at')
+    .limit(50)
+
+  let sent = 0, failed = 0
+
+  for (const n of pending ?? []) {
+    try {
+      const result = n.channel === 'email'
+        ? await sendEmail(n.recipient, n.subject!, n.body)
+        : await sendWhatsApp(n.recipient, n.body)
+
+      if (result.ok) {
+        await supabase.from('notification_queue').update({
+          status: 'sent', sent_at: new Date().toISOString(),
+          attempts: n.attempts + 1,
+        }).eq('id', n.id)
+        sent++
+      } else {
+        throw new Error(result.error)
+      }
+    } catch (err: any) {
+      await supabase.from('notification_queue').update({
+        status: n.attempts >= 2 ? 'failed' : 'pending',
+        attempts: n.attempts + 1,
+        error: err.message,
+      }).eq('id', n.id)
+      failed++
+    }
+  }
+
+  return NextResponse.json({ processed: (pending ?? []).length, sent, failed })
+}
+```
+
+### Actualizar `vercel.json`
+
+```json
+{
+  "crons": [
+    { "path": "/api/cron/close-lots", "schedule": "* * * * *" },
+    { "path": "/api/cron/send-notifications", "schedule": "* * * * *" }
+  ]
+}
+```
+
+### UI: opt-in de notificaciones en `BidPanel.tsx`
+
+Agregá estos campos antes del nombre:
+
+```tsx
+<div className="grid grid-cols-2 gap-2 mb-3">
+  <label className="block">
+    <span className="text-xs font-semibold text-earth-soft uppercase">Email</span>
+    <input
+      type="email"
+      value={bidder.email ?? ''}
+      onChange={e => setBidderEmail(e.target.value)}
+      placeholder="tu@email.com"
+      className="mt-1 w-full px-3 py-2 text-sm rounded-lg border border-cream-dark"
+    />
+  </label>
+  <label className="block">
+    <span className="text-xs font-semibold text-earth-soft uppercase">WhatsApp</span>
+    <input
+      type="tel"
+      value={bidder.phone ?? ''}
+      onChange={e => setBidderPhone(e.target.value)}
+      placeholder="099123456"
+      className="mt-1 w-full px-3 py-2 text-sm rounded-lg border border-cream-dark"
+    />
+  </label>
+</div>
+<p className="text-[11px] text-earth-soft -mt-2 mb-3">
+  🔔 Te avisamos si te superan en un lote.
+</p>
+```
+
+### `.env.local`
+
+```bash
+RESEND_API_KEY=re_...
+TWILIO_ACCOUNT_SID=AC...
+TWILIO_AUTH_TOKEN=...
+TWILIO_WHATSAPP_NUMBER=+14155238886  # Sandbox de Twilio para testing
+```
+
+### Dependencias
+
+```bash
+npm i resend twilio
+```
+
+---
+
+## 📱 2. PWA Instalable
+
+> En 2026 usamos `@ducanh2912/next-pwa` (el original `next-pwa` está deprecado).
+
+### `next.config.mjs`
+
+```javascript
+import withPWA from '@ducanh2912/next-pwa'
+
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  reactStrictMode: true,
+  images: {
+    remotePatterns: [
+      { protocol: 'https', hostname: 'images.unsplash.com' },
+      { protocol: 'https', hostname: '**.supabase.co' },
+    ],
+  },
+}
+
+export default withPWA({
+  dest: 'public',
+  register: true,
+  skipWaiting: true,
+  disable: process.env.NODE_ENV === 'development',
+  customWorkerSrc: '/firebase-messaging-sw.js', // opcional
+})(nextConfig)
+```
+
+### `public/manifest.json`
+
+```json
+{
+  "name": "Remates Agrícolas #59",
+  "short_name": "RemateAgro",
+  "description": "Remate virtual de herramientas agrícolas en vivo",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#faf7f0",
+  "theme_color": "#2d5016",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icons/icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "categories": ["shopping", "business"],
+  "shortcuts": [
+    { "name": "Ver lotes", "url": "/#lotes", "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }] },
+    { "name": "Ganadores", "url": "/ganadores" },
+    { "name": "Reglamento", "url": "/reglamento" }
+  ]
+}
+```
+
+> Generá los íconos con https://realfavicongenerator.net o https://www.pwabuilder.com/imageGenerator. Guardalos en `public/icons/`.
+
+### Actualizar `app/layout.tsx`
+
+```tsx
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="es" suppressHydrationWarning>
+      <head>
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#2d5016" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="RemateAgro" />
+        <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+      </head>
+      <body className={`${inter.variable} ${playfair.variable} font-sans antialiased bg-cream text-earth`}>
+        <BidderProvider>
+          {children}
+          <Toaster />
+          <InstallPWAButton />
+        </BidderProvider>
+      </body>
+    </html>
+  )
+}
+```
+
+### `components/pwa/InstallPWAButton.tsx`
+
+```tsx
+'use client'
+import { useEffect, useState } from 'react'
+import { Download, X } from 'lucide-react'
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
+}
+
+export function InstallPWAButton() {
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
+  const [show, setShow] = useState(false)
+  const [isIOS, setIsIOS] = useState(false)
+
+  useEffect(() => {
+    const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+    const dismissed = localStorage.getItem('pwa_dismissed')
+
+    if (isStandalone || dismissed) return
+
+    if (isIOSDevice) {
+      setIsIOS(true)
+      setShow(true)
+      return
+    }
+
+    const handler = (e: Event) => {
+      e.preventDefault()
+      setDeferredPrompt(e as BeforeInstallPromptEvent)
+      setShow(true)
+    }
+    window.addEventListener('beforeinstallprompt', handler)
+    return () => window.removeEventListener('beforeinstallprompt', handler)
+  }, [])
+
+  const handleInstall = async () => {
+    if (!deferredPrompt) return
+    deferredPrompt.prompt()
+    const { outcome } = await deferredPrompt.userChoice
+    if (outcome === 'accepted') setShow(false)
+    setDeferredPrompt(null)
+  }
+
+  const dismiss = () => {
+    setShow(false)
+    localStorage.setItem('pwa_dismissed', '1')
+  }
+
+  if (!show) return null
+
+  return (
+    <div className="fixed bottom-20 left-4 right-4 md:left-auto md:right-4 md:w-80 z-50 animate-in slide-in-from-bottom-4">
+      <div className="bg-white rounded-2xl shadow-2xl border-2 border-forest p-4 relative">
+        <button
+          onClick={dismiss}
+          className="absolute top-2 right-2 w-6 h-6 rounded-full hover:bg-cream-dark flex items-center justify-center"
+        >
+          <X className="w-3 h-3" />
+        </button>
+
+        <div className="flex items-start gap-3">
+          <div className="w-12 h-12 bg-forest rounded-xl flex items-center justify-center flex-shrink-0">
+            <span className="text-2xl">🚜</span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-display font-bold text-forest-dark">Instalá la app</h3>
+            <p className="text-xs text-earth-soft mt-0.5">
+              {isIOS
+                ? 'Tocá el ícono de compartir ↑ y luego "Agregar a inicio"'
+                : 'Recibí alertas de pujas al instante, incluso sin abrir el navegador'}
+            </p>
+            {!isIOS && (
+              <button
+                onClick={handleInstall}
+                className="mt-2 flex items-center gap-1.5 px-3 py-1.5 bg-forest hover:bg-forest-dark text-white text-xs font-semibold rounded-lg"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Instalar
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+```
+
+### Dependencia
+
+```bash
+npm i @ducanh2912/next-pwa
+```
+
+---
+
+## 📊 3. Panel de Analytics
+
+### `supabase/migrations/analytics.sql`
+
+```sql
+create table page_views (
+  id bigserial primary key,
+  path text not null,
+  lot_id bigint,
+  session_id text not null,
+  referrer text,
+  user_agent text,
+  country text,
+  created_at timestamptz default now()
+);
+
+create index idx_pv_lot on page_views(lot_id, created_at desc);
+create index idx_pv_created on page_views(created_at desc);
+
+-- Resumen materializado (se actualiza cada hora vía pg_cron o Vercel Cron)
+create materialized view lot_stats as
+select
+  l.id as lot_id,
+  l.title,
+  l.album,
+  l.starting_price,
+  l.status,
+  (select count(*) from page_views pv where pv.lot_id = l.id) as total_views,
+  (select count(*) from bids b where b.lot_id = l.id) as total_bids,
+  (select count(distinct bidder_session_id) from bids where lot_id = l.id) as unique_bidders,
+  (select max(amount) from bids where lot_id = l.id) as highest_bid,
+  case
+    when (select count(*) from bids where lot_id = l.id) > 0 then 1
+    else 0
+  end as converted
+from lots l;
+
+create unique index idx_lot_stats_id on lot_stats(lot_id);
+
+-- Función para refrescar
+create or replace function refresh_lot_stats()
+returns void as $$
+begin
+  refresh materialized view concurrently lot_stats;
+end;
+$$ language plpgsql;
+```
+
+### `middleware.ts` (trackear page views)
+
+```typescript
+import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
+
+export async function middleware(req: NextRequest) {
+  const res = NextResponse.next()
+
+  // Trackear solo páginas de lote
+  const match = req.nextUrl.pathname.match(/^\/lote\/(\d+)$/)
+  if (match && req.method === 'GET') {
+    const lotId = Number(match[1])
+    const sessionId = req.cookies.get('bidder_sid')?.value || req.headers.get('x-forwarded-for') || 'anon'
+
+    // Fire-and-forget (no bloquea la respuesta)
+    fetch(`${req.nextUrl.origin}/api/analytics/track`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        path: req.nextUrl.pathname,
+        lotId,
+        sessionId,
+        referrer: req.headers.get('referer'),
+        userAgent: req.headers.get('user-agent'),
+        country: req.headers.get('x-vercel-ip-country'),
+      }),
+    }).catch(() => {})
+  }
+
+  return res
+}
+
+export const config = { matcher: ['/lote/:path*'] }
+```
+
+### `app/api/analytics/track/route.ts`
+
+```typescript
+import { NextRequest, NextResponse } from 'next/server'
+import { createServerSupabase } from '@/lib/supabase/server'
+
+export async function POST(req: NextRequest) {
+  try {
+    const data = await req.json()
+    const supabase = await createServerSupabase()
+    await supabase.from('page_views').insert({
+      path: data.path,
+      lot_id: data.lotId,
+      session_id: data.sessionId,
+      referrer: data.referrer,
+      user_agent: data.userAgent,
+      country: data.country,
+    })
+    return NextResponse.json({ ok: true })
+  } catch {
+    return NextResponse.json({ ok: false }, { status: 500 })
+  }
+}
+```
+
+### `app/admin/analytics/page.tsx`
+
+```tsx
+import { createServerSupabase } from '@/lib/supabase/server'
+import { StatsGrid } from '@/components/analytics/StatsGrid'
+import { TopLotsChart } from '@/components/analytics/TopLotsChart'
+import { ConversionFunnel } from '@/components/analytics/ConversionFunnel'
+import { RecentActivity } from '@/components/analytics/RecentActivity'
+
+export const dynamic = 'force-dynamic'
+
+export default async function AnalyticsPage() {
+  const supabase = await createServerSupabase()
+
+  const [
+    { data: stats },
+    { data: topLots },
+    { data: funnel },
+    { data: recentBids },
+  ] = await Promise.all([
+    supabase.rpc('get_global_stats'),
+    supabase.from('lot_stats').select('*').order('total_views', { ascending: false }).limit(10),
+    supabase.rpc('get_conversion_funnel'),
+    supabase.from('bids')
+      .select('*, lot:lots(title)')
+      .order('created_at', { ascending: false })
+      .limit(20),
+  ])
+
+  return (
+    <div>
+      <h1 className="font-display text-3xl text-forest-dark mb-6">📊 Analytics</h1>
+
+      <StatsGrid stats={stats} />
+
+      <div className="grid md:grid-cols-2 gap-6 mt-6">
+        <TopLotsChart lots={topLots ?? []} />
+        <ConversionFunnel funnel={funnel} />
+      </div>
+
+      <div className="mt-6">
+        <RecentActivity bids={recentBids ?? []} />
+      </div>
+    </div>
+  )
+}
+```
+
+### `supabase/functions/analytics.sql` (funciones agregadas)
+
+```sql
+create or replace function get_global_stats()
+returns jsonb as $$
+declare
+  result jsonb;
+begin
+  select jsonb_build_object(
+    'total_views', (select count(*) from page_views where created_at > now() - interval '7 days'),
+    'unique_visitors', (select count(distinct session_id) from page_views where created_at > now() - interval '7 days'),
+    'total_bids', (select count(*) from bids where created_at > now() - interval '7 days'),
+    'active_bidders', (select count(distinct bidder_session_id) from bids where created_at > now() - interval '7 days'),
+    'revenue_potential', (select coalesce(sum(max_bid), 0) from (
+      select max(amount) as max_bid from bids group by lot_id
+    ) as sub),
+    'conversion_rate', (
+      select round(100.0 * count(*) filter (where converted = 1) / nullif(count(*), 0), 1)
+      from lot_stats
+    )
+  ) into result;
+  return result;
+end;
+$$ language plpgsql;
+
+create or replace function get_conversion_funnel()
+returns jsonb as $$
+declare
+  result jsonb;
+begin
+  select jsonb_build_object(
+    'lot_views', (select count(*) from page_views),
+    'unique_viewers', (select count(distinct session_id) from page_views),
+    'bidders', (select count(distinct bidder_session_id) from bids),
+    'total_bids', (select count(*) from bids),
+    'won_lots', (select count(*) from lots where status = 'closed' and winner_bid_id is not null)
+  ) into result;
+  return result;
+end;
+$$ language plpgsql;
+```
+
+### `components/analytics/StatsGrid.tsx`
+
+```tsx
+import { Eye, Users, Gavel, DollarSign, Target, TrendingUp } from 'lucide-react'
+import { formatCurrency } from '@/lib/auction/rules'
+
+export function StatsGrid({ stats }: { stats: any }) {
+  const cards = [
+    { label: 'Vistas (7 días)', value: stats?.total_views?.toLocaleString() ?? 0, icon: Eye, color: 'bg-forest' },
+    { label: 'Visitantes únicos', value: stats?.unique_visitors?.toLocaleString() ?? 0, icon: Users, color: 'bg-forest-dark' },
+    { label: 'Pujas (7 días)', value: stats?.total_bids?.toLocaleString() ?? 0, icon: Gavel, color: 'bg-wheat' },
+    { label: 'Pujadores activos', value: stats?.active_bidders?.toLocaleString() ?? 0, icon: TrendingUp, color: 'bg-earth' },
+    { label: 'Ingresos potenciales', value: formatCurrency(stats?.revenue_potential ?? 0), icon: DollarSign, color: 'bg-forest' },
+    { label: 'Tasa de conversión', value: `${stats?.conversion_rate ?? 0}%`, icon: Target, color: 'bg-alert' },
+  ]
+
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      {cards.map(c => (
+        <div key={c.label} className="bg-white rounded-xl p-4 shadow-sm">
+          <div className={`w-9 h-9 rounded-lg ${c.color} text-white flex items-center justify-center mb-3`}>
+            <c.icon className="w-4 h-4" />
+          </div>
+          <p className="font-display text-xl font-bold text-earth">{c.value}</p>
+          <p className="text-xs text-earth-soft">{c.label}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+```
+
+### `components/analytics/TopLotsChart.tsx`
+
+```tsx
+'use client'
+import { BarChart3 } from 'lucide-react'
+
+interface Props { lots: any[] }
+
+export function TopLotsChart({ lots }: Props) {
+  const max = Math.max(...lots.map(l => l.total_views || 1), 1)
+
+  return (
+    <div className="bg-white rounded-2xl p-5 shadow-sm">
+      <div className="flex items-center gap-2 mb-4">
+        <BarChart3 className="w-5 h-5 text-forest" />
+        <h3 className="font-display text-lg text-forest-dark">Lotes más vistos</h3>
+      </div>
+
+      <div className="space-y-3">
+        {lots.map((lot, i) => (
+          <div key={lot.lot_id}>
+            <div className="flex items-center justify-between text-sm mb-1">
+              <span className="truncate font-medium text-earth">
+                #{i + 1} {lot.title}
+              </span>
+              <span className="text-earth-soft tabular-nums">{lot.total_views} vistas</span>
+            </div>
+            <div className="h-2 bg-cream-dark rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-forest to-wheat rounded-full transition-all"
+                style={{ width: `${(lot.total_views / max) * 100}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-[10px] text-earth-soft mt-0.5">
+              <span>{lot.unique_bidders} pujadores</span>
+              <span>{lot.total_bids} pujas</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+```
+
+### `components/analytics/ConversionFunnel.tsx`
+
+```tsx
+'use client'
+import { Funnel } from 'lucide-react'
+
+export function ConversionFunnel({ funnel }: { funnel: any }) {
+  const steps = [
+    { label: 'Vistas de lotes', value: funnel?.lot_views ?? 0, color: 'bg-forest' },
+    { label: 'Visitantes únicos', value: funnel?.unique_viewers ?? 0, color: 'bg-forest/80' },
+    { label: 'Pujadores', value: funnel?.bidders ?? 0, color: 'bg-wheat' },
+    { label: 'Pujas totales', value: funnel?.total_bids ?? 0, color: 'bg-wheat-light' },
+    { label: 'Lotes adjudicados', value: funnel?.won_lots ?? 0, color: 'bg-earth' },
+  ]
+
+  const max = steps[0].value || 1
+
+  return (
+    <div className="bg-white rounded-2xl p-5 shadow-sm">
+      <div className="flex items-center gap-2 mb-4">
+        <Funnel className="w-5 h-5 text-forest" />
+        <h3 className="font-display text-lg text-forest-dark">Embudo de conversión</h3>
+      </div>
+
+      <div className="space-y-2">
+        {steps.map((step, i) => {
+          const pct = Math.round((step.value / max) * 100)
+          return (
+            <div key={step.label}>
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="font-medium text-earth">{step.label}</span>
+                <span className="text-earth-soft tabular-nums">
+                  {step.value.toLocaleString()} {i > 0 && `(${pct}%)`}
+                </span>
+              </div>
+              <div
+                className={`h-6 ${step.color} rounded-md flex items-center px-2 text-white text-xs font-bold`}
+                style={{ width: `${Math.max(pct, 5)}%` }}
+              >
+                {pct}%
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+```
+
+### `components/analytics/RecentActivity.tsx`
+
+```tsx
+import { Clock, User, ArrowUp } from 'lucide-react'
+import { formatCurrency } from '@/lib/auction/rules'
+
+export function RecentActivity({ bids }: { bids: any[] }) {
+  return (
+    <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+      <div className="px-5 py-3 border-b border-cream-dark flex items-center gap-2">
+        <Clock className="w-4 h-4 text-forest" />
+        <h3 className="font-display text-lg text-forest-dark">Actividad reciente</h3>
+      </div>
+
+      <div className="divide-y divide-cream-dark max-h-96 overflow-y-auto">
+        {bids.map(bid => (
+          <div key={bid.id} className="px-5 py-3 flex items-center gap-3 hover:bg-cream/50">
+            <div className="w-9 h-9 rounded-full bg-wheat flex items-center justify-center flex-shrink-0">
+              <User className="w-4 h-4 text-earth" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-earth">
+                <b>{bid.bidder_name}</b> pujó <b className="text-forest">{formatCurrency(bid.amount)}</b>
+              </p>
+              <p className="text-xs text-earth-soft truncate">
+                {bid.lot?.title}
+              </p>
+            </div>
+            <div className="text-right text-xs text-earth-soft">
+              <p>{new Date(bid.created_at).toLocaleDateString('es-UY')}</p>
+              <p>{new Date(bid.created_at).toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit' })}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+```
+
+---
+
+## 🔍 4. Búsqueda y Filtros Avanzados
+
+### `supabase/migrations/search.sql`
+
+```sql
+-- Full-text search en español
+alter table lots add column if not exists fts tsvector
+  generated always as (
+    to_tsvector('spanish', coalesce(title, '') || ' ' || coalesce(description, ''))
+  ) stored;
+
+create index idx_lots_fts on lots using gin(fts);
+
+-- Búsqueda con ranking
+create or replace function search_lots(
+  p_query text default null,
+  p_album int default null,
+  p_min_price numeric default null,
+  p_max_price numeric default null,
+  p_status text default null
+)
+returns setof lots as $$
+begin
+  return query
+  select *
+  from lots
+  where (p_query is null or fts @@ plainto_tsquery('spanish', p_query))
+    and (p_album is null or album = p_album)
+    and (p_min_price is null or starting_price >= p_min_price)
+    and (p_max_price is null or starting_price <= p_max_price)
+    and (p_status is null or status = p_status)
+  order by
+    case when p_query is not null
+      then ts_rank(fts, plainto_tsquery('spanish', p_query))
+      else 0
+    end desc,
+    sort_order asc;
+end;
+$$ language plpgsql;
+```
+
+### `components/search/SearchFilters.tsx`
+
+```tsx
+'use client'
+import { useState, useTransition, useEffect } from 'react'
+import { Search, SlidersHorizontal, X } from 'lucide-react'
+import { searchLots } from '@/app/actions/search'
+import type { Lot } from '@/types'
+
+interface Props {
+  initialLots: Lot[]
+  onResults: (lots: Lot[]) => void
+}
+
+export function SearchFilters({ initialLots, onResults }: Props) {
+  const [query, setQuery] = useState('')
+  const [album, setAlbum] = useState<number | null>(null)
+  const [minPrice, setMinPrice] = useState<number | ''>('')
+  const [maxPrice, setMaxPrice] = useState<number | ''>('')
+  const [status, setStatus] = useState<string>('active')
+  const [showFilters, setShowFilters] = useState(false)
+  const [isPending, startTransition] = useTransition()
+
+  useEffect(() => {
+    const debounce = setTimeout(() => {
+      startTransition(async () => {
+        if (!query && !album && !minPrice && !maxPrice && status === 'active') {
+          onResults(initialLots)
+          return
+        }
+        const results = await searchLots(
+          query || null,
+          album,
+          minPrice ? Number(minPrice) : null,
+          maxPrice ? Number(maxPrice) : null,
+          status || null
+        )
+        onResults(results)
+      })
+    }, 300)
+    return () => clearTimeout(debounce)
+  }, [query, album, minPrice, maxPrice, status])
+
+  const clearAll = () => {
+    setQuery('')
+    setAlbum(null)
+    setMinPrice('')
+    setMaxPrice('')
+    setStatus('active')
+    onResults(initialLots)
+  }
+
+  return (
+    <div className="mb-6 space-y-3">
+      {/* Search bar */}
+      <div className="flex gap-2">
+        <div className="flex-1 relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-earth-soft" />
+          <input
+            type="text"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Buscar tractor, cosechadora, arado..."
+            className="w-full pl-10 pr-4 py-3 rounded-xl border border-cream-dark focus:border-forest focus:ring-2 focus:ring-forest/20 outline-none"
+          />
+        </div>
+        <button
+          onClick={() => setShowFilters(!showFilters)}
+          className={`px-4 rounded-xl border flex items-center gap-2 ${
+            showFilters ? 'bg-forest text-white border-forest' : 'bg-white border-cream-dark hover:bg-cream-dark'
+          }`}
+        >
+          <SlidersHorizontal className="w-4 h-4" />
+          <span className="text-sm font-semibold hidden sm:inline">Filtros</span>
+        </button>
+      </div>
+
+      {/* Panel de filtros */}
+      {showFilters && (
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-cream-dark grid sm:grid-cols-2 md:grid-cols-4 gap-3 animate-in slide-in-from-top-2">
+          <div>
+            <label className="text-xs font-semibold text-earth-soft uppercase">Álbum</label>
+            <select
+              value={album ?? ''}
+              onChange={e => setAlbum(e.target.value ? Number(e.target.value) : null)}
+              className="w-full mt-1 px-3 py-2 rounded-lg border border-cream-dark text-sm"
+            >
+              <option value="">Todos</option>
+              <option value="1">Álbum 1/4</option>
+              <option value="2">Álbum 2/4</option>
+              <option value="3">Álbum 3/4</option>
+              <option value="4">Álbum 4/4</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-earth-soft uppercase">Precio mín (US$)</label>
+            <input
+              type="number"
+              value={minPrice}
+              onChange={e => setMinPrice(e.target.value)}
+              placeholder="0"
+              className="w-full mt-1 px-3 py-2 rounded-lg border border-cream-dark text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-earth-soft uppercase">Precio máx (US$)</label>
+            <input
+              type="number"
+              value={maxPrice}
+              onChange={e => setMaxPrice(e.target.value)}
+              placeholder="100000"
+              className="w-full mt-1 px-3 py-2 rounded-lg border border-cream-dark text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-earth-soft uppercase">Estado</label>
+            <select
+              value={status}
+              onChange={e => setStatus(e.target.value)}
+              className="w-full mt-1 px-3 py-2 rounded-lg border border-cream-dark text-sm"
+            >
+              <option value="active">Activos</option>
+              <option value="extended">Con prórroga</option>
+              <option value="closed">Cerrados</option>
+              <option value="">Todos</option>
+            </select>
+          </div>
+
+          <div className="sm:col-span-2 md:col-span-4 flex justify-end">
+            <button
+              onClick={clearAll}
+              className="flex items-center gap-1 text-xs text-earth-soft hover:text-earth"
+            >
+              <X className="w-3 h-3" />
+              Limpiar filtros
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isPending && (
+        <div className="text-xs text-earth-soft animate-pulse">Buscando...</div>
+      )}
+    </div>
+  )
+}
+```
+
+### `app/actions/search.ts`
+
+```typescript
+'use server'
+import { createServerSupabase } from '@/lib/supabase/server'
+import type { Lot } from '@/types'
+
+export async function searchLots(
+  query: string | null,
+  album: number | null,
+  minPrice: number | null,
+  maxPrice: number | null,
+  status: string | null
+): Promise<Lot[]> {
+  const supabase = await createServerSupabase()
+
+  if (query) {
+    const { data, error } = await supabase.rpc('search_lots', {
+      p_query: query,
+      p_album: album,
+      p_min_price: minPrice,
+      p_max_price: maxPrice,
+      p_status: status,
+    })
+    return (data ?? []) as Lot[]
+  }
+
+  // Sin query textual: filtros simples
+  let q = supabase.from('lots').select('*')
+  if (album) q = q.eq('album', album)
+  if (minPrice) q = q.gte('starting_price', minPrice)
+  if (maxPrice) q = q.lte('starting_price', maxPrice)
+  if (status) q = q.eq('status', status)
+
+  const { data } = await q.order('sort_order')
+  return (data ?? []) as Lot[]
+}
+```
+
+### Integrar en `app/page.tsx`
+
+```tsx
+'use client'
+// Convertir el home en client o envolver en un wrapper client
+import { useState } from 'react'
+import { SearchFilters } from '@/components/search/SearchFilters'
+import { LotGrid } from '@/components/auction/LotGrid'
+
+export function SearchableLotGrid({ initialLots }: { initialLots: any[] }) {
+  const [results, setResults] = useState(initialLots)
+
+  return (
+    <>
+      <SearchFilters initialLots={initialLots} onResults={setResults} />
+      <LotGrid lots={results} />
+      {results.length === 0 && (
+        <div className="text-center py-16 text-earth-soft">
+          <p className="text-lg">No se encontraron lotes con esos filtros.</p>
+          <p className="text-sm">Probá cambiando los criterios de búsqueda.</p>
+        </div>
+      )}
+    </>
+  )
+}
+```
+
+---
+
+## 🖨️ 5. Catálogo PDF imprimible
+
+### `app/lote/catalogo/[album]/pdf.tsx` (documento PDF)
+
+```tsx
+import { Document, Page, Text, View, Image, StyleSheet, Font } from '@react-pdf/renderer'
+import type { Lot } from '@/types'
+import { formatCurrency } from '@/lib/auction/rules'
+
+Font.register({
+  family: 'Inter',
+  fonts: [
+    { src: 'https://fonts.gstatic.com/s/inter/v12/UcC73FwrK3iLTeHuS_fvQtMwCp50KnMa1ZL7.ttf', fontWeight: 400 },
+    { src: 'https://fonts.gstatic.com/s/inter/v12/UcC73FwrK3iLTeHuS_fvQtMwCp50KnMa2JL7SUc.ttf', fontWeight: 700 },
+  ],
+})
+
+const styles = StyleSheet.create({
+  page: { padding: 30, fontFamily: 'Inter', fontSize: 10 },
+  header: { marginBottom: 15, borderBottom: '2 solid #2d5016', paddingBottom: 10 },
+  title: { fontSize: 22, fontWeight: 700, color: '#2d5016' },
+  subtitle: { fontSize: 11, color: '#6b5842', marginTop: 4 },
+  lotCard: {
+    marginBottom: 15, flexDirection: 'row',
+    border: '1 solid #e8b86d', borderRadius: 4, overflow: 'hidden',
+  },
+  image: { width: 140, height: 105, backgroundColor: '#f0ead9' },
+  info: { flex: 1, padding: 10 },
+  lotTitle: { fontSize: 13, fontWeight: 700, color: '#2d5016', marginBottom: 4 },
+  lotId: { fontSize: 9, color: '#e8b86d', fontWeight: 700 },
+  description: { fontSize: 9, color: '#3a2f1f', lineHeight: 1.4, marginBottom: 6 },
+  priceBox: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 'auto' },
+  priceLabel: { fontSize: 8, color: '#6b5842' },
+  priceValue: { fontSize: 14, fontWeight: 700, color: '#2d5016' },
+  footer: {
+    position: 'absolute', bottom: 20, left: 30, right: 30,
+    fontSize: 8, color: '#6b5842', textAlign: 'center',
+  },
+})
+
+interface Props {
+  lots: Lot[]
+  album: number
+}
+
+export function CatalogoPDF({ lots, album }: Props) {
+  return (
+    <Document>
+      <Page size="A4" style={styles.page}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Remate Virtual Agrícola #59</Text>
+          <Text style={styles.subtitle}>
+            Catálogo Álbum {album}/4 · {lots.length} lotes · Martes 19 de Mayo, 20:00 hrs
+          </Text>
+        </View>
+
+        {lots.map((lot, i) => (
+          <View key={lot.id} style={styles.lotCard} break={i > 0 && i % 4 === 0}>
+            {lot.image_urls[0] && (
+              <Image src={lot.image_urls[0]} style={styles.image} />
+            )}
+            <View style={styles.info}>
+              <Text style={styles.lotId}>LOTE #{lot.id}</Text>
+              <Text style={styles.lotTitle}>{lot.title}</Text>
+              <Text style={styles.description} numberOfLines={4}>
+                {lot.description ?? 'Sin descripción.'}
+              </Text>
+              <View style={styles.priceBox}>
+                <View>
+                  <Text style={styles.priceLabel}>PRECIO DE PARTIDA</Text>
+                  <Text style={styles.priceValue}>{formatCurrency(lot.starting_price)}</Text>
+                </View>
+                <View style={{ textAlign: 'right' }}>
+                  <Text style={styles.priceLabel}>INCREMENTO</Text>
+                  <Text style={[styles.priceValue, { fontSize: 11 }]}>
+                    US$ {lot.starting_price < 200 ? 10 : lot.starting_price <= 5000 ? 50 : 100}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        ))}
+
+        <Text style={styles.footer} render={({ pageNumber, totalPages }) => (
+          `Página ${pageNumber} de ${totalPages} · Consultas: 096 125 030 · remates-agricolas.com.uy`
+        )} fixed />
+      </Page>
+    </Document>
+  )
+}
+```
+
+### `app/lote/catalogo/[album]/route.tsx` (endpoint que devuelve el PDF)
+
+```tsx
+import { NextResponse } from 'next/server'
+import { renderToBuffer } from '@react-pdf/renderer'
+import { CatalogoPDF } from './pdf'
+import { createServerSupabase } from '@/lib/supabase/server'
+
+export const dynamic = 'force-dynamic'
+
+export async function GET(
+  req: Request,
+  { params }: { params: { album: string } }
+) {
+  const album = Number(params.album)
+  if (![1, 2, 3, 4].includes(album)) {
+    return NextResponse.json({ error: 'Álbum inválido' }, { status: 400 })
+  }
+
+  const supabase = await createServerSupabase()
+  const { data: lots } = await supabase
+    .from('lots')
+    .select('*')
+    .eq('album', album)
+    .order('sort_order')
+
+  const buffer = await renderToBuffer(
+    <CatalogoPDF lots={lots ?? []} album={album} />
+  )
+
+  return new NextResponse(buffer, {
+    headers: {
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="remate-59-album-${album}.pdf"`,
+      'Cache-Control': 'public, max-age=300',
+    },
+  })
+}
+```
+
+### Botón en `app/page.tsx` (home)
+
+```tsx
+<div className="flex gap-2 mb-6">
+  {[1, 2, 3, 4].map(a => (
+    <a
+      key={a}
+      href={`/lote/catalogo/${a}`}
+      target="_blank"
+      className="px-3 py-1.5 text-xs font-semibold bg-earth hover:bg-earth-soft text-cream rounded-lg flex items-center gap-1"
+    >
+      🖨️ PDF Álbum {a}
+    </a>
+  ))}
+</div>
+```
+
+### Dependencia
+
+```bash
+npm i @react-pdf/renderer
+```
+
+> ⚠️ Importante: `@react-pdf/renderer` funciona tanto en servidor (Node) como en cliente. Para generar server-side y cachear, el endpoint anterior es la mejor opción. Si querés generación en cliente, usá `@react-pdf/renderer` con `<PDFDownloadLink>`.
+
+---
+
+## 📦 Dependencias totales (agregar al `package.json`)
+
+```bash
+npm i resend twilio @ducanh2912/next-pwa @react-pdf/renderer
+```
+
+---
+
+## 🔄 Cron actualizado (`vercel.json`)
+
+```json
+{
+  "crons": [
+    { "path": "/api/cron/close-lots", "schedule": "* * * * *" },
+    { "path": "/api/cron/send-notifications", "schedule": "* * * * *" }
+  ]
+}
+```
+
+Y para refrescar `lot_stats` cada hora, agregar en `supabase/migrations/analytics.sql`:
+
+```sql
+select cron.schedule('refresh-lot-stats', '0 * * * *', 'select refresh_lot_stats();');
+```
+
+---
+
+## 🎁 Nuevas variables de entorno (`.env.local`)
+
+```bash
+# Notificaciones
+RESEND_API_KEY=re_...
+TWILIO_ACCOUNT_SID=AC...
+TWILIO_AUTH_TOKEN=...
+TWILIO_WHATSAPP_NUMBER=+14155238886
+
+# Analytics (ya tenías CRON_SECRET)
+# Nada nuevo
+
+# PWA (no requiere vars, solo archivos estáticos)
+# PDF (no requiere vars)
+```
+
+---
+
+## ✅ Checklist de las 5 features
+
+| # | Feature | Archivos | Estado |
+|---|---|---|---|
+| 1 | Notificaciones email/WhatsApp | migrations + 3 lib + 1 route + UI | ✅ |
+| 2 | PWA instalable | next.config + manifest + InstallPWAButton | ✅ |
+| 3 | Analytics completo | migrations + middleware + route + 4 componentes + página | ✅ |
+| 4 | Búsqueda y filtros | migrations + SearchFilters + action + integración | ✅ |
+| 5 | Catálogo PDF | documento + endpoint + botón | ✅ |
+
+---
+
+## 💰 Costos adicionales estimados
+
+| Servicio | Plan free | Límite |
+|---|---|---|
+| **Resend** | Free tier | 3.000 emails/mes |
+| **Twilio WhatsApp** | Trial | US$ 15 de crédito inicial (~200 mensajes) |
+| **Analytics** | Todo en tu Postgres | Sin costo extra |
+| **PDF** | Generado server-side | Sin costo extra |
+
+> **Total con features avanzadas:** sigue siendo ~US$ 2.50/mes si te mantenés dentro de los free tiers.
+
+---
+
+## 🎯 Orden recomendado de activación
+
+1. **Primero: Analytics** (no requiere servicios externos, te da data desde el día 1)
+2. **Segundo: Búsqueda** (mejora UX inmediata, cero costo)
+3. **Tercero: PWA** (fideliza a los usuarios recurrentes)
+4. **Cuarto: Catálogo PDF** (imprescindible para el cliente rural sin buen internet)
+5. **Quinto: Notificaciones** (activar al final, cuando ya tengas usuarios)
