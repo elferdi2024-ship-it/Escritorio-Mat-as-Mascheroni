@@ -65,7 +65,7 @@ export default function ImageGallery({ imageUrls, title }: ImageGalleryProps) {
       {/* Imagen Principal */}
       <div className="relative aspect-video rounded-2xl overflow-hidden border border-neutral-200 bg-neutral-100 shadow-[0_4px_24px_rgba(0,0,0,0.06)] group cursor-pointer" onClick={() => setIsLightboxOpen(true)}>
         {renderImage(
-          images[activeIndex],
+          images[activeIndex] ?? '',
           activeIndex,
           "absolute inset-0 w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.02]",
           `${title} - Vista ${activeIndex + 1}`
@@ -176,7 +176,7 @@ export default function ImageGallery({ imageUrls, title }: ImageGalleryProps) {
 
             <div className="relative max-w-5xl w-full max-h-[75vh] flex items-center justify-center">
               {renderImage(
-                images[activeIndex],
+                images[activeIndex] ?? '',
                 activeIndex,
                 "max-w-full max-h-[75vh] object-contain rounded-lg shadow-2xl",
                 `${title} - Detalle ${activeIndex + 1}`
