@@ -397,7 +397,7 @@ begin
   ) then
     insert into notification_queue (bidder_session_id, lot_id, channel, recipient, subject, body)
     select
-      b.session_id, NEW.lot_id, 'email', bd.email,
+      bd.session_id, NEW.lot_id, 'email', bd.email,
       '⚠️ Te superaron en: ' || l.title,
       'Hola ' || bd.name || ', tu puja de US$ ' || prev_bid.amount ||
       ' fue superada por US$ ' || NEW.amount || ' en "' || l.title || '". Pujá de nuevo.'
@@ -420,7 +420,7 @@ begin
   ) then
     insert into notification_queue (bidder_session_id, lot_id, channel, recipient, body)
     select
-      b.session_id, NEW.lot_id, 'whatsapp', bd.whatsapp,
+      bd.session_id, NEW.lot_id, 'whatsapp', bd.whatsapp,
       '🚜 Remate #59 - Te superaron en: ' || l.title ||
       '. Nueva puja: US$ ' || NEW.amount
     from bids b
