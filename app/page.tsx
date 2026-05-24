@@ -8,7 +8,7 @@ import { InstallPWAButton } from '@/components/pwa/InstallPWAButton'
 import { searchLotsAction } from '@/app/actions/search'
 import type { LotWithDetails } from '@/types'
 
-export const revalidate = 0 // Dynamic rendering to always have fresh bid details
+export const revalidate = 5 // ISR: Ultra-fast CDN delivery with 5s background revalidation, live synced via WebSockets
 
 interface HomePageProps {
   searchParams: {

@@ -7,8 +7,9 @@ import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useBidder } from '@/components/providers/BidderProvider'
-import { User, Gavel, FileText, Award, X, Settings } from 'lucide-react'
+import { User, Gavel, FileText, Award, X, Settings, Volume2, VolumeX } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { getMuted, setMuted } from '@/lib/sounds'
 
 export default function Navbar() {
   const pathname = usePathname()
@@ -20,6 +21,19 @@ export default function Navbar() {
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
+  
+  // Audio state
+  const [muted, setMutedState] = useState(true)
+
+  useEffect(() => {
+    setMutedState(getMuted())
+  }, [])
+
+  const toggleMute = () => {
+    const nextMuted = !muted
+    setMuted(nextMuted)
+    setMutedState(nextMuted)
+  }
 
   useEffect(() => {
     const handleScroll = () => {
@@ -102,8 +116,22 @@ export default function Navbar() {
             })}
           </nav>
 
-          {/* Acciones de Lado Derecho (Usuario / Identidad) */}
-          <div className="flex items-center gap-3">
+          {/* Acciones de Lado Derecho (Usuario / Identidad / Sonido) */}
+          <div className="flex items-center gap-2">
+            {/* Botón de Sonido */}
+            <button
+              onClick={toggleMute}
+              className="p-2 rounded-full bg-white hover:bg-neutral-50 border border-neutral-200 text-neutral-500 hover:text-[var(--color-forest-500)] shadow-subtle transition-all duration-300 active:scale-[0.97]"
+              title={muted ? "Activar Sonido" : "Silenciar Sonido"}
+              aria-label={muted ? "Activar Sonido de Subasta" : "Silenciar Sonido de Subasta"}
+            >
+              {muted ? (
+                <VolumeX className="w-4 h-4 text-rose-500" />
+              ) : (
+                <Volume2 className="w-4 h-4 text-[var(--color-forest-500)]" />
+              )}
+            </button>
+
             <button
               onClick={openModal}
               className={cn(

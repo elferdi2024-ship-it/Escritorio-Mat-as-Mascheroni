@@ -1,7 +1,23 @@
 // filepath: d:/PROYECTOS/REMATE CAMPO/lib/sounds.ts
-// @optimization: ui-ux-pro-max - Sonidos de puja y victoria sintéticos con Web Audio API (cero latencia y cero assets)
+// @optimization: ui-ux-pro-max - Sonidos de puja y victoria sintéticos con Web Audio API (cero latencia, cero assets, con estado mute persistente)
 
 let audioContext: AudioContext | null = null
+let isMuted = false
+
+if (typeof window !== 'undefined') {
+  isMuted = localStorage.getItem('subasta_muted') === 'true'
+}
+
+export function getMuted(): boolean {
+  return isMuted
+}
+
+export function setMuted(muted: boolean) {
+  isMuted = muted
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('subasta_muted', String(muted))
+  }
+}
 
 const getAudioContext = (): AudioContext => {
   if (!audioContext) {
@@ -14,7 +30,7 @@ const getAudioContext = (): AudioContext => {
 }
 
 export function playBidSound() {
-  if (typeof window === 'undefined') return
+  if (typeof window === 'undefined' || isMuted) return
   try {
     const ctx = getAudioContext()
     const osc = ctx.createOscillator()
@@ -40,7 +56,7 @@ export function playBidSound() {
 }
 
 export function playWinSound() {
-  if (typeof window === 'undefined') return
+  if (typeof window === 'undefined' || isMuted) return
   try {
     const ctx = getAudioContext()
     // Acorde arpegiado alegre (Do, Mi, Sol, Do)
@@ -68,7 +84,7 @@ export function playWinSound() {
 }
 
 export function playOutbidSound() {
-  if (typeof window === 'undefined') return
+  if (typeof window === 'undefined' || isMuted) return
   try {
     const ctx = getAudioContext()
     const osc = ctx.createOscillator()

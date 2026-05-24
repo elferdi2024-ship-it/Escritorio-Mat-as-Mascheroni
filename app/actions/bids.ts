@@ -68,8 +68,8 @@ export async function placeBidAction(
   const { data, error } = await (supabase.rpc as any)('place_bid', {
     p_lot_id: lotId,
     p_amount: amount,
-    p_cookie_sid: sessionUuid,
-    p_name: bidderName,
+    p_session_id: sessionUuid,
+    p_bidder_name: bidderName,
     p_phone: phone,
     p_email: email
   })
