@@ -44,20 +44,13 @@ function LotCard({ lot, index }: { lot: LotWithDetails; index: number }) {
     >
       {/* === IMAGEN === */}
       <div className="relative aspect-[16/10] w-full overflow-hidden bg-gradient-to-br from-neutral-100 to-neutral-200 shrink-0">
-        {!imgError ? (
-          <img
-            src={mainImage}
-            alt={lot.title}
-            loading={index < 6 ? 'eager' : 'lazy'}
-            onError={() => setImgError(true)}
-            className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.06] transition-transform duration-[1.2s] ease-out"
-          />
-        ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-[var(--color-forest-50)] to-[var(--color-cream-warm)] text-[var(--color-forest)]">
-            <Gavel className="w-10 h-10 opacity-30 mb-2" />
-            <span className="text-xs font-semibold opacity-50">Imagen no disponible</span>
-          </div>
-        )}
+        <img
+          src={imgError ? '/lote-59/lote-59.jpeg' : mainImage}
+          alt={lot.title}
+          loading={index < 6 ? 'eager' : 'lazy'}
+          onError={() => setImgError(true)}
+          className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.06] transition-transform duration-[1.2s] ease-out"
+        />
 
         {/* Degradado cinematográfico */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/5 to-transparent pointer-events-none" />

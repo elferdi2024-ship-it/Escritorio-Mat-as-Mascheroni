@@ -42,16 +42,9 @@ export default function ImageGallery({ imageUrls, title }: ImageGalleryProps) {
   }, [isLightboxOpen, goNext, goPrev])
 
   const renderImage = (url: string, index: number, className: string, alt: string) => {
-    if (imgErrors.has(index)) {
-      return (
-        <div className={cn("flex items-center justify-center bg-gradient-to-br from-neutral-100 to-neutral-200 text-neutral-400", className)}>
-          <ZoomIn className="w-8 h-8 opacity-30" />
-        </div>
-      )
-    }
     return (
       <img
-        src={url}
+        src={imgErrors.has(index) ? '/lote-59/lote-59.jpeg' : url}
         alt={alt}
         loading={index === 0 ? 'eager' : 'lazy'}
         onError={() => handleImageError(index)}
