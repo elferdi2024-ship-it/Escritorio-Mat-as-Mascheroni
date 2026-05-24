@@ -210,6 +210,7 @@ export default async function LotDetailPage({ params }: LotPageProps) {
             startingPrice={Number(lot.starting_price)}
             currentPrice={currentPrice}
             status={lot.status}
+            highestBidderName={bids?.[0]?.bidder_name || null}
           />
         </div>
 

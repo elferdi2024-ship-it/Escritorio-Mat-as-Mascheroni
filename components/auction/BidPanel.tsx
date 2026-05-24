@@ -16,9 +16,10 @@ interface BidPanelProps {
   startingPrice: number
   currentPrice: number
   status: 'active' | 'extended' | 'closed'
+  highestBidderName?: string | null
 }
 
-export default function BidPanel({ lotId, startingPrice, currentPrice, status }: BidPanelProps) {
+export default function BidPanel({ lotId, startingPrice, currentPrice, status, highestBidderName }: BidPanelProps) {
   const { bidder, setBidder, isLoaded } = useBidder()
   const { toast } = useToast()
   
@@ -26,11 +27,45 @@ export default function BidPanel({ lotId, startingPrice, currentPrice, status }:
   const [customAmount, setCustomAmount] = useState<string>('')
   const [localPrice, setLocalPrice] = useState(currentPrice)
   const [formError, setFormError] = useState<string | null>(null)
+  const [localLeader, setLocalLeader] = useState<string | null>(highestBidderName || null)
 
-  // Sincronizar el precio actual local cuando cambie por Realtime
+  // Sincronizar el precio actual local y el líder actual cuando cambie por Realtime
   useEffect(() => {
     setLocalPrice(currentPrice)
   }, [currentPrice])
+
+  useEffect(() => {
+    setLocalLeader(highestBidderName || null)
+  }, [highestBidderName])
+
+  const triggerConfetti = () => {
+    if (typeof window === 'undefined') return
+    const colors = ['#d4af37', '#2e7d32', '#8b5a2b', '#10b981', '#f59e0b']
+    for (let i = 0; i < 40; i++) {
+      const confetti = document.createElement('div')
+      confetti.style.position = 'fixed'
+      confetti.style.left = `${Math.random() * 100}vw`
+      confetti.style.top = '100vh'
+      confetti.style.width = `${Math.random() * 10 + 5}px`
+      confetti.style.height = `${Math.random() * 10 + 5}px`
+      confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)] || '#d4af37'
+      confetti.style.zIndex = '9999'
+      confetti.style.borderRadius = '2px'
+      confetti.style.transform = `rotate(${Math.random() * 360}deg)`
+      confetti.style.transition = 'transform 2s ease-out, top 2s ease-out, opacity 2s ease-out'
+      document.body.appendChild(confetti)
+
+      setTimeout(() => {
+        confetti.style.top = `${Math.random() * 30 + 20}vh`
+        confetti.style.transform = `rotate(${Math.random() * 720}deg) translateX(${Math.random() * 80 - 40}px)`
+        confetti.style.opacity = '0'
+      }, 50)
+
+      setTimeout(() => {
+        confetti.remove()
+      }, 2100)
+    }
+  }
 
   const increment = AUCTION_RULES.getIncrement(startingPrice)
   const minNextBid = AUCTION_RULES.getNextBid(localPrice, startingPrice)
@@ -86,6 +121,8 @@ export default function BidPanel({ lotId, startingPrice, currentPrice, status }:
           description: `Tu oferta por ${formatCurrency(amount)} ha sido colocada. Eres el nuevo líder.`,
         })
         setCustomAmount('')
+        triggerConfetti()
+        setLocalLeader(name)
       } else {
         // Revertir optimismo
         setLocalPrice(previousPrice)
@@ -117,9 +154,27 @@ export default function BidPanel({ lotId, startingPrice, currentPrice, status }:
   }
 
   const isBiddingDisabled = isPending || !isLoaded
+  const isMeLeader = isLoaded && bidder.name !== '' && localLeader === bidder.name
 
   return (
-    <div className="bg-white/60 backdrop-blur-md rounded-2xl border border-[var(--color-glass-border)] shadow-premium p-6 flex flex-col gap-6 sticky top-6">
+    <div 
+      className={cn(
+        "backdrop-blur-md rounded-2xl border transition-all duration-500 shadow-premium p-6 flex flex-col gap-6 sticky top-6",
+        isMeLeader 
+          ? "border-amber-400 bg-gradient-to-br from-amber-50/10 to-white/95 shadow-[0_0_30px_rgba(212,175,55,0.22)]"
+          : "bg-white/60 border-[var(--color-glass-border)]"
+      )}
+    >
+      {/* Indicador de Líder Actual */}
+      {isMeLeader && (
+        <div className="w-full bg-amber-500/10 border border-amber-400/30 rounded-xl p-3 flex items-center gap-2.5 shadow-subtle animate-[scaleUp_0.25s_var(--ease-spring)]">
+          <span className="text-xl">👑</span>
+          <div className="flex flex-col">
+            <span className="text-[9px] font-display font-extrabold text-amber-700 uppercase tracking-widest leading-none">Vas Ganando</span>
+            <span className="text-[10px] text-amber-900 font-semibold mt-1">¡Sos la oferta más alta de este lote!</span>
+          </div>
+        </div>
+      )}
       <div>
         <h3 className="text-lg font-display font-extrabold text-[var(--color-earth)] flex items-center gap-2">
           <Gavel className="w-5 h-5 text-[var(--color-forest)] animate-pulse" />
