@@ -12,6 +12,7 @@ import LiveTicker from '@/components/layout/LiveTicker'
 import Navbar from '@/components/layout/Navbar'
 import { Footer } from '@/components/layout/Footer'
 import '@/app/globals.css'
+import { WhatsAppButton } from '@/components/ui/WhatsAppButton'
 
 const fontSans = Inter({
   subsets: ['latin'],
@@ -80,6 +81,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
             {/* Toaster de notificaciones */}
             <Toaster />
+
+            {/* Botón flotante de soporte por WhatsApp */}
+            <WhatsAppButton />
           </BidderProvider>
         </BrandProvider>
       </body>

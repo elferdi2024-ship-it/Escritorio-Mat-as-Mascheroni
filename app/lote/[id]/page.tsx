@@ -15,8 +15,15 @@ import { WinnerBanner } from '@/components/auction/WinnerBanner'
 import BidPanel from '@/components/auction/BidPanel'
 import { formatCurrency } from '@/lib/auction/rules'
 import { getMockLotDetails } from '@/lib/auction/mock-data'
+import { LotChat } from '@/components/auction/LotChat'
 
-export const dynamic = 'force-dynamic' // Force dynamic rendering because we read cookies in createServerSupabase
+export const revalidate = 5 // ISR: Ultra-fast CDN delivery with 5s background revalidation
+
+export async function generateStaticParams() {
+  return Array.from({ length: 20 }, (_, i) => ({
+    id: String(i + 1),
+  }))
+}
 
 interface LotPageProps {
   params: {
@@ -165,12 +172,17 @@ export default async function LotDetailPage({ params }: LotPageProps) {
             </p>
           </div>
 
-          {/* Historial de Ofertas */}
-          <div className="bg-white rounded-2xl border border-neutral-200 p-6 shadow-premium">
-            <h3 className="text-base font-display font-bold text-[var(--color-earth)] mb-4 uppercase tracking-wider">
-              Historial de Ofertas
-            </h3>
-            <BidHistory bids={bids || []} />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Historial de Ofertas */}
+            <div className="bg-white rounded-2xl border border-neutral-200 p-6 shadow-premium">
+              <h3 className="text-base font-display font-bold text-[var(--color-earth)] mb-4 uppercase tracking-wider">
+                Historial de Ofertas
+              </h3>
+              <BidHistory bids={bids || []} />
+            </div>
+
+            {/* Chat en vivo de negociación */}
+            <LotChat lotId={lot.id} />
           </div>
         </div>
 
